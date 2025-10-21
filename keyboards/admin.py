@@ -7,14 +7,20 @@ def get_admin_main_kb():
     kb.button(text='➕ Добавить товар', callback_data='admin_add_product')
     kb.button(text='🛠️ Управление товарами', callback_data='admin_manage_products')
     kb.button(text='📋 Заявки (лиды)', callback_data='admin_leads')
+    kb.button(text='👤 Главное меню', callback_data='to_user_panel')  # Новая кнопка
     kb.adjust(1)
     return kb.as_markup()
 
-def get_product_manage_kb(product_id):
+def get_product_manage_kb(product_id, category):
     kb = InlineKeyboardBuilder()
     kb.button(text='✏️ Редактировать', callback_data=f'admin_edit_{product_id}')
     kb.button(text='🗑️ Удалить', callback_data=f'admin_delete_{product_id}')
-    kb.button(text='🔙 Назад', callback_data='admin_back_main')
+    # Для особых категорий кнопка назад ведет на выбор категорий
+    special_cats = ['tables', 'dressers', 'mattress', 'bed', 'wardrobe']
+    if category in special_cats:
+        kb.button(text='🔙 Назад', callback_data='admin_back_category')
+    else:
+        kb.button(text='🔙 Назад', callback_data='admin_back_type')
     kb.adjust(1)
     return kb.as_markup()
 
@@ -53,14 +59,27 @@ def get_admin_categories_kb():
         'bedroom': '🛏️',
         'kitchen': '🍽️',
         'soft': '🛋️',
+        'bed': '🛌',
         'tables': '🪑',
         'dressers': '🗄️',
         'mattress': '🛌',
         'wardrobe': '🚪',
     }
-    for cat in ProductCategory:
-        emoji = emoji_map.get(cat.name, '')
-        kb.button(text=f'{emoji} {cat.value}', callback_data=f'admin_cat_{cat.name}')
+    # Новый порядок: bedroom, kitchen, soft, tables, dressers, mattress, bed, wardrobe
+    ordered = [
+        'bedroom',
+        'kitchen',
+        'soft',
+        'tables',
+        'dressers',
+        'mattress',
+        'bed',
+        'wardrobe',
+    ]
+    for cat_name in ordered:
+        cat = getattr(ProductCategory, cat_name)
+        emoji = emoji_map.get(cat_name, '')
+        kb.button(text=f'{emoji} {cat.value}', callback_data=f'admin_cat_{cat_name}')
     kb.button(text='🔙 Назад', callback_data='admin_back_main')
     kb.adjust(1)
     return kb.as_markup()
@@ -69,19 +88,18 @@ def get_admin_countries_kb(category):
     kb = InlineKeyboardBuilder()
     kb.button(text='🇷🇺 Российская', callback_data=f'admin_country_{category}_Российская')
     kb.button(text='🇹🇷 Турецкая', callback_data=f'admin_country_{category}_Турецкая')
-    kb.button(text='🔙 Назад', callback_data=f'back_to_category')
+    # при возврате с выбора страны хотим вернуться на этап выбора категории
+    kb.button(text='🔙 Назад', callback_data='admin_back_category')
     kb.adjust(1)
     return kb.as_markup()
 
 def get_admin_types_kb(category, country):
     kb = InlineKeyboardBuilder()
-    if category in ['kitchen', 'soft'] and (country is None or country == 'Российская'):
+    allowed_categories = ['kitchen', 'soft', 'Кухонная мебель', 'Мягкая мебель']
+    if category in allowed_categories and (country is None or country == 'Российская'):
         kb.button(text='➡️ прямая', callback_data=f'admin_type_{category}_{country}_прямая')
         kb.button(text='↩️ угловая', callback_data=f'admin_type_{category}_{country}_угловая')
-    if category == 'kitchen':
-        kb.button(text='🔙 Назад', callback_data='back_to_category')
-    else:
-        kb.button(text='🔙 Назад', callback_data=f'back_to_country_{category}')
+    kb.button(text='🔙 Назад', callback_data='admin_back_country')
     kb.adjust(1)
     return kb.as_markup()
 
@@ -108,3 +126,10 @@ def get_categories_kb():
     markup = kb.as_markup()
     print(f'Клавиатура категорий: {markup}')  # DEBUG
     return markup
+
+def get_fsm_cancel_skip_kb():
+    kb = InlineKeyboardBuilder()
+    kb.button(text='❌ Отмена', callback_data='fsm_cancel')
+    kb.button(text='⏭️ Пропустить', callback_data='fsm_skip')
+    kb.adjust(2)
+    return kb.as_markup()

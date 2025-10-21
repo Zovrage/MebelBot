@@ -1,7 +1,11 @@
+import re
+import os
+
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InputFile
 from aiogram.types.input_file import FSInputFile
+
 from database.crud import get_products, add_lead, get_photos_by_product
 from database.models import ProductCategory
 from database.db import async_session
@@ -10,8 +14,7 @@ from keyboards.user import (
     get_simple_cat_kb, get_product_card_kb
 )
 from states.user import OrderForm
-import re
-import os
+
 
 router = Router()
 
@@ -38,44 +41,83 @@ async def start_menu(msg: Message):
 @router.callback_query(F.data == 'admin_panel')
 async def admin_panel(call: CallbackQuery):
     from keyboards.admin import get_admin_main_kb
-    await call.message.edit_text('Админ-панель', reply_markup=get_admin_main_kb())
+    new_text = 'Админ-панель'
+    new_markup = get_admin_main_kb()
+    if call.message.text != new_text or call.message.reply_markup != new_markup:
+        await call.message.edit_text(new_text, reply_markup=new_markup)
 
 @router.callback_query(F.data == 'back_main')
-async def back_main(call: CallbackQuery):
-    await call.message.edit_text('Главное меню. Выберите категорию:', reply_markup=main_menu_kb)
+async def back_main(call: CallbackQuery, state: FSMContext):
+    # Удаление всех сообщений с карточками, если они были отправлены
+    data = await state.get_data()
+    message_ids = data.get('user_product_message_ids', [])
+    for msg_id in message_ids:
+        try:
+            await call.bot.delete_message(call.message.chat.id, msg_id)
+        except Exception:
+            pass
+    await state.update_data(user_product_message_ids=[])
+    # Переход на главное меню
+    new_text = 'Главное меню. Выберите категорию:'
+    new_markup = main_menu_kb
+    try:
+        await call.message.edit_text(new_text, reply_markup=new_markup)
+    except Exception:
+        await call.message.answer(new_text, reply_markup=new_markup)
+    await state.clear()
 
 # --- Категории и подкатегории ---
 @router.callback_query(F.data == 'cat_bedroom')
 async def bedroom_menu(call: CallbackQuery):
-    await call.message.edit_text('Спальная мебель:', reply_markup=get_bedroom_kb())
+    new_text = 'Спальная мебель:'
+    new_markup = get_bedroom_kb()
+    if call.message.text != new_text or call.message.reply_markup != new_markup:
+        await call.message.edit_text(new_text, reply_markup=new_markup)
 
 @router.callback_query(F.data == 'cat_kitchen')
 async def kitchen_menu(call: CallbackQuery):
-    await call.message.edit_text('Кухонная мебель:', reply_markup=get_kitchen_kb())
+    new_text = 'Кухонная мебель:'
+    new_markup = get_kitchen_kb()
+    if call.message.text != new_text or call.message.reply_markup != new_markup:
+        await call.message.edit_text(new_text, reply_markup=new_markup)
 
 @router.callback_query(F.data == 'cat_soft')
 async def soft_menu(call: CallbackQuery):
-    await call.message.edit_text('Мягкая мебель:', reply_markup=get_soft_kb())
+    new_text = 'Мягкая мебель:'
+    new_markup = get_soft_kb()
+    if call.message.text != new_text or call.message.reply_markup != new_markup:
+        await call.message.edit_text(new_text, reply_markup=new_markup)
 
 @router.callback_query(F.data == 'soft')
 async def soft_menu_back(call: CallbackQuery):
-    await call.message.edit_text('Мягкая мебель:', reply_markup=get_soft_kb())
+    new_text = 'Мягкая мебель:'
+    new_markup = get_soft_kb()
+    if call.message.text != new_text or call.message.reply_markup != new_markup:
+        await call.message.edit_text(new_text, reply_markup=new_markup)
 
 @router.callback_query(F.data == 'soft_rus')
 async def soft_rus_menu(call: CallbackQuery):
-    await call.message.edit_text('Мягкая мебель — Российская:', reply_markup=get_soft_rus_kb())
+    new_text = 'Мягкая мебель — Российская:'
+    new_markup = get_soft_rus_kb()
+    if call.message.text != new_text or call.message.reply_markup != new_markup:
+        await call.message.edit_text(new_text, reply_markup=new_markup)
 
 @router.callback_query(F.data == 'back_to_cat')
 async def back_to_cat(call: CallbackQuery, state: FSMContext):
-    # Можно хранить в state текущую категорию для возврата
-    await call.message.edit_text('Выберите категорию:', reply_markup=main_menu_kb)
+    new_text = 'Выберите категорию:'
+    new_markup = main_menu_kb
+    if call.message.text != new_text or call.message.reply_markup != new_markup:
+        await call.message.edit_text(new_text, reply_markup=new_markup)
 
 # --- Галерея товаров по категориям ---
 async def show_products(call, category, country=None, type_=None):
     async with async_session() as session:
         products = await get_products(session, category=category, country=country, type_=type_)
         if not products:
-            await call.message.edit_text('Товары не найдены.', reply_markup=get_simple_cat_kb('back_main'))
+            new_text = 'Товары не найдены.'
+            new_markup = get_simple_cat_kb('back_main')
+            if call.message.text != new_text or call.message.reply_markup != new_markup:
+                await call.message.edit_text(new_text, reply_markup=new_markup)
             return
         for idx, product in enumerate(products):
             # Получаем фото из таблицы Photo
@@ -163,7 +205,10 @@ async def show_wardrobe(call: CallbackQuery):
 # --- О компании ---
 @router.callback_query(F.data == 'about')
 async def about_company(call: CallbackQuery):
-    await call.message.edit_text('Мебельный магазин. Контакты: +7-900-000-00-00\nАдрес: г. Пример, ул. Мебельная, 1', reply_markup=get_simple_cat_kb('back_main'))
+    new_text = 'Мебельный магазин. Контакты: +7-900-000-00-00\nАдрес: г. Пример, ул. Мебельная, 1'
+    new_markup = get_simple_cat_kb('back_main')
+    if call.message.text != new_text or call.message.reply_markup != new_markup:
+        await call.message.edit_text(new_text, reply_markup=new_markup)
 
 # --- Заказ, консультация, вопрос ---
 @router.callback_query(F.data.startswith('order_'))
@@ -206,3 +251,23 @@ async def ask_question(call: CallbackQuery):
 @router.callback_query(F.data.startswith('consult_'))
 async def consult_request(call: CallbackQuery):
     await call.message.answer('Пожалуйста, отправьте ваш телефон для консультации.')
+
+@router.callback_query(F.data.regexp(r'^(back_|soft$)'))
+async def universal_back(call: CallbackQuery, state: FSMContext):
+    # Удаление всех сообщений с карточками, если они были отправлены
+    data = await state.get_data()
+    message_ids = data.get('user_product_message_ids', [])
+    for msg_id in message_ids:
+        try:
+            await call.bot.delete_message(call.message.chat.id, msg_id)
+        except Exception:
+            pass
+    await state.update_data(user_product_message_ids=[])
+    # Переход на главное меню
+    new_text = 'Главное меню. Выберите категорию:'
+    new_markup = main_menu_kb
+    try:
+        await call.message.edit_text(new_text, reply_markup=new_markup)
+    except Exception:
+        await call.message.answer(new_text, reply_markup=new_markup)
+    await state.clear()

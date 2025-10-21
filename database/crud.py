@@ -78,3 +78,26 @@ async def get_photos_by_product(session: AsyncSession, product_id: int):
 async def delete_photo(session: AsyncSession, photo_id: int):
     await session.execute(delete(Photo).where(Photo.id == photo_id))
     await session.commit()
+
+async def get_products_by_params(category=None, country=None, type_=None):
+    from .db import async_session
+    async with async_session() as session:
+        stmt = select(Product)
+        if category:
+            enum_category = None
+            if isinstance(category, str):
+                # Пробуем получить enum по имени (например 'soft')
+                try:
+                    enum_category = ProductCategory[category]
+                except Exception:
+                    # Если не получилось, не ищем по значению, а фильтруем по строке
+                    enum_category = category
+            else:
+                enum_category = category
+            stmt = stmt.where(Product.category == enum_category)
+        if country:
+            stmt = stmt.where(Product.country == country)
+        if type_:
+            stmt = stmt.where(Product.type == type_)
+        result = await session.execute(stmt)
+        return result.scalars().all()

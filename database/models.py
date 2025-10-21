@@ -11,6 +11,7 @@ class ProductCategory(enum.Enum):
     bedroom = 'Спальная мебель'
     kitchen = 'Кухонная мебель'
     soft = 'Мягкая мебель'
+    bed = 'Кровати'
     tables = 'Столы и стулья'
     dressers = 'Тумбы и комоды'
     mattress = 'Матрасы'
