@@ -1,11 +1,7 @@
-import re
-import os
-
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InputFile
 from aiogram.types.input_file import FSInputFile
-
 from database.crud import get_products, add_lead, get_photos_by_product
 from database.models import ProductCategory
 from database.db import async_session
@@ -14,7 +10,8 @@ from keyboards.user import (
     get_simple_cat_kb, get_product_card_kb
 )
 from states.user import OrderForm
-
+import re
+import os
 
 router = Router()
 
@@ -38,87 +35,81 @@ async def start_menu(msg: Message):
     )
     await msg.answer(text, reply_markup=main_menu_kb)
 
-@router.callback_query(F.data == 'admin_panel')
-async def admin_panel(call: CallbackQuery):
-    from keyboards.admin import get_admin_main_kb
-    new_text = 'Админ-панель'
-    new_markup = get_admin_main_kb()
-    if call.message.text != new_text or call.message.reply_markup != new_markup:
-        await call.message.edit_text(new_text, reply_markup=new_markup)
-
 @router.callback_query(F.data == 'back_main')
-async def back_main(call: CallbackQuery, state: FSMContext):
-    # Удаление всех сообщений с карточками, если они были отправлены
-    data = await state.get_data()
-    message_ids = data.get('user_product_message_ids', [])
-    for msg_id in message_ids:
-        try:
-            await call.bot.delete_message(call.message.chat.id, msg_id)
-        except Exception:
-            pass
-    await state.update_data(user_product_message_ids=[])
-    # Переход на главное меню
-    new_text = 'Главное меню. Выберите категорию:'
-    new_markup = main_menu_kb
-    try:
-        await call.message.edit_text(new_text, reply_markup=new_markup)
-    except Exception:
-        await call.message.answer(new_text, reply_markup=new_markup)
-    await state.clear()
+async def back_main(call: CallbackQuery):
+    await call.message.edit_text('Главное меню. Выберите категорию:', reply_markup=main_menu_kb)
 
 # --- Категории и подкатегории ---
 @router.callback_query(F.data == 'cat_bedroom')
 async def bedroom_menu(call: CallbackQuery):
-    new_text = 'Спальная мебель:'
-    new_markup = get_bedroom_kb()
-    if call.message.text != new_text or call.message.reply_markup != new_markup:
-        await call.message.edit_text(new_text, reply_markup=new_markup)
+    await call.message.edit_text('Спальная мебель:', reply_markup=get_bedroom_kb())
 
 @router.callback_query(F.data == 'cat_kitchen')
 async def kitchen_menu(call: CallbackQuery):
-    new_text = 'Кухонная мебель:'
-    new_markup = get_kitchen_kb()
-    if call.message.text != new_text or call.message.reply_markup != new_markup:
-        await call.message.edit_text(new_text, reply_markup=new_markup)
+    await call.message.edit_text('Кухонная мебель:', reply_markup=get_kitchen_kb())
 
 @router.callback_query(F.data == 'cat_soft')
 async def soft_menu(call: CallbackQuery):
-    new_text = 'Мягкая мебель:'
-    new_markup = get_soft_kb()
-    if call.message.text != new_text or call.message.reply_markup != new_markup:
-        await call.message.edit_text(new_text, reply_markup=new_markup)
+    await call.message.edit_text('Мягкая мебель:', reply_markup=get_soft_kb())
 
 @router.callback_query(F.data == 'soft')
 async def soft_menu_back(call: CallbackQuery):
-    new_text = 'Мягкая мебель:'
-    new_markup = get_soft_kb()
-    if call.message.text != new_text or call.message.reply_markup != new_markup:
-        await call.message.edit_text(new_text, reply_markup=new_markup)
+    await call.message.edit_text('Мягкая мебель:', reply_markup=get_soft_kb())
 
 @router.callback_query(F.data == 'soft_rus')
 async def soft_rus_menu(call: CallbackQuery):
-    new_text = 'Мягкая мебель — Российская:'
-    new_markup = get_soft_rus_kb()
-    if call.message.text != new_text or call.message.reply_markup != new_markup:
-        await call.message.edit_text(new_text, reply_markup=new_markup)
+    await call.message.edit_text('Мягкая мебель — Российская:', reply_markup=get_soft_rus_kb())
 
 @router.callback_query(F.data == 'back_to_cat')
 async def back_to_cat(call: CallbackQuery, state: FSMContext):
-    new_text = 'Выберите категорию:'
-    new_markup = main_menu_kb
-    if call.message.text != new_text or call.message.reply_markup != new_markup:
-        await call.message.edit_text(new_text, reply_markup=new_markup)
+    # Можно хранить в state текущую категорию для возврата
+    await call.message.edit_text('Выберите категорию:', reply_markup=main_menu_kb)
 
 # --- Галерея товаров по категориям ---
+def get_country_display(country_code):
+    if country_code == 'russia':
+        return '🇷🇺 Российская'
+    elif country_code == 'turkey':
+        return '🇹🇷 Турецкая'
+    return country_code or '-'
+
+def get_type_display(type_code):
+    if type_code == 'straight':
+        return 'Прямая'
+    elif type_code == 'corner':
+        return 'Угловая'
+    return type_code or '-'
+
 async def show_products(call, category, country=None, type_=None):
+    # Удаляем предыдущие сообщения с товарами (если есть)
+    state: FSMContext = call.bot.get('fsm_context') if hasattr(call.bot, 'get') else None
+    if state is not None:
+        data = await state.get_data()
+        prev_product_msgs = data.get('product_message_ids', [])
+        for msg_id in prev_product_msgs:
+            try:
+                await call.bot.delete_message(call.message.chat.id, msg_id)
+            except Exception:
+                pass
+        await state.update_data(product_message_ids=[])
+    else:
+        # fallback: удаляем только текущее сообщение, если не используем FSM
+        try:
+            await call.message.delete()
+        except Exception:
+            pass
     async with async_session() as session:
         products = await get_products(session, category=category, country=country, type_=type_)
         if not products:
-            new_text = 'Товары не найдены.'
-            new_markup = get_simple_cat_kb('back_main')
-            if call.message.text != new_text or call.message.reply_markup != new_markup:
-                await call.message.edit_text(new_text, reply_markup=new_markup)
+            if call.message:
+                try:
+                    await call.message.edit_text('Товаров нет', reply_markup=get_simple_cat_kb('back_main'))
+                except Exception:
+                    await call.message.answer('Товаров нет', reply_markup=get_simple_cat_kb('back_main'))
+            else:
+                await call.message.answer('Товаров нет', reply_markup=get_simple_cat_kb('back_main'))
             return
+        new_product_msgs = []
         for idx, product in enumerate(products):
             # Получаем фото из таблицы Photo
             photos = await get_photos_by_product(session, product.id)
@@ -135,7 +126,8 @@ async def show_products(call, category, country=None, type_=None):
             caption = (
                 f"Название: {product.name}\n"
                 f"Описание: {product.description or '-'}\n"
-                f"Страна: {product.country or '-'}\n"
+                f"Страна: {get_country_display(product.country)}\n"
+                f"Тип: {get_type_display(getattr(product, 'type', None))}\n"
                 f"Размеры: {getattr(product, 'sizes', '-') or '-'}\n"
                 f"Цена: {price_str}"
             )
@@ -143,19 +135,24 @@ async def show_products(call, category, country=None, type_=None):
                 media[0].caption = caption
                 media[0].parse_mode = 'HTML'
                 if len(media) == 1:
-                    await call.message.answer_photo(media=media[0].media, caption=caption, parse_mode='HTML')
+                    msg = await call.message.answer_photo(media=media[0].media, caption=caption, parse_mode='HTML')
+                    new_product_msgs.append(msg.message_id)
                 else:
-                    await call.message.answer_media_group(media)
-                await call.message.answer(
-                    reply_markup=get_product_card_kb(product.id),
-                    text="Выберите действие:",
-                )
+                    msgs = await call.message.answer_media_group(media)
+                    for m in msgs:
+                        new_product_msgs.append(m.message_id)
+                msg2 = await call.message.answer(reply_markup=get_product_card_kb(product.id), text="Выберите действие:")
+                new_product_msgs.append(msg2.message_id)
             else:
-                await call.message.answer(
+                msg = await call.message.answer(
                     caption,
                     reply_markup=get_product_card_kb(product.id),
                     parse_mode='HTML'
                 )
+                new_product_msgs.append(msg.message_id)
+    # Сохраняем id новых сообщений в FSM для последующего удаления
+    if state is not None:
+        await state.update_data(product_message_ids=new_product_msgs)
 
 # --- Карточка товара ---
 @router.callback_query(F.data.startswith('bedroom'))
@@ -163,7 +160,7 @@ async def show_bedroom(call: CallbackQuery):
     sub = call.data.replace('bedroom_', '')
     country = None
     if sub in ['rus', 'tur']:
-        country = 'Российская' if sub == 'rus' else 'Турецкая'
+        country = 'russia' if sub == 'rus' else 'turkey'
     await show_products(call, ProductCategory.bedroom, country=country)
 
 @router.callback_query(F.data.startswith('kitchen'))
@@ -171,20 +168,20 @@ async def show_kitchen(call: CallbackQuery):
     sub = call.data.replace('kitchen_', '')
     type_ = None
     if sub in ['straight', 'corner']:
-        type_ = 'прямая' if sub == 'straight' else 'угловая'
+        type_ = sub  # 'straight' или 'corner'
     await show_products(call, ProductCategory.kitchen, type_=type_)
 
 @router.callback_query(F.data == 'soft_rus_straight')
 async def show_soft_rus_straight(call: CallbackQuery):
-    await show_products(call, ProductCategory.soft, country='Российская', type_='прямая')
+    await show_products(call, ProductCategory.soft, country='russia', type_='straight')
 
 @router.callback_query(F.data == 'soft_rus_corner')
 async def show_soft_rus_corner(call: CallbackQuery):
-    await show_products(call, ProductCategory.soft, country='Российская', type_='угловая')
+    await show_products(call, ProductCategory.soft, country='russia', type_='corner')
 
 @router.callback_query(F.data == 'soft_tur')
 async def show_soft_tur(call: CallbackQuery):
-    await show_products(call, ProductCategory.soft, country='Турецкая')
+    await show_products(call, ProductCategory.soft, country='turkey')
 
 @router.callback_query(F.data == 'cat_tables')
 async def show_tables(call: CallbackQuery):
@@ -202,13 +199,14 @@ async def show_mattress(call: CallbackQuery):
 async def show_wardrobe(call: CallbackQuery):
     await show_products(call, ProductCategory.wardrobe)
 
+@router.callback_query(F.data == 'cat_beds')
+async def show_beds(call: CallbackQuery):
+    await show_products(call, ProductCategory.beds)
+
 # --- О компании ---
 @router.callback_query(F.data == 'about')
 async def about_company(call: CallbackQuery):
-    new_text = 'Мебельный магазин. Контакты: +7-900-000-00-00\nАдрес: г. Пример, ул. Мебельная, 1'
-    new_markup = get_simple_cat_kb('back_main')
-    if call.message.text != new_text or call.message.reply_markup != new_markup:
-        await call.message.edit_text(new_text, reply_markup=new_markup)
+    await call.message.edit_text('Мебельный магазин. Контакты: +7-900-000-00-00\nАдрес: г. Пример, ул. Мебельная, 1', reply_markup=get_simple_cat_kb('back_main'))
 
 # --- Заказ, консультация, вопрос ---
 @router.callback_query(F.data.startswith('order_'))
@@ -251,23 +249,3 @@ async def ask_question(call: CallbackQuery):
 @router.callback_query(F.data.startswith('consult_'))
 async def consult_request(call: CallbackQuery):
     await call.message.answer('Пожалуйста, отправьте ваш телефон для консультации.')
-
-@router.callback_query(F.data.regexp(r'^(back_|soft$)'))
-async def universal_back(call: CallbackQuery, state: FSMContext):
-    # Удаление всех сообщений с карточками, если они были отправлены
-    data = await state.get_data()
-    message_ids = data.get('user_product_message_ids', [])
-    for msg_id in message_ids:
-        try:
-            await call.bot.delete_message(call.message.chat.id, msg_id)
-        except Exception:
-            pass
-    await state.update_data(user_product_message_ids=[])
-    # Переход на главное меню
-    new_text = 'Главное меню. Выберите категорию:'
-    new_markup = main_menu_kb
-    try:
-        await call.message.edit_text(new_text, reply_markup=new_markup)
-    except Exception:
-        await call.message.answer(new_text, reply_markup=new_markup)
-    await state.clear()

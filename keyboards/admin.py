@@ -1,135 +1,105 @@
-from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from database.models import ProductCategory
+from database.models import ProductCategory, LeadStatus
 
-def get_admin_main_kb():
-    kb = InlineKeyboardBuilder()
-    kb.button(text='➕ Добавить товар', callback_data='admin_add_product')
-    kb.button(text='🛠️ Управление товарами', callback_data='admin_manage_products')
-    kb.button(text='📋 Заявки (лиды)', callback_data='admin_leads')
-    kb.button(text='👤 Главное меню', callback_data='to_user_panel')  # Новая кнопка
-    kb.adjust(1)
-    return kb.as_markup()
 
-def get_product_manage_kb(product_id, category):
-    kb = InlineKeyboardBuilder()
-    kb.button(text='✏️ Редактировать', callback_data=f'admin_edit_{product_id}')
-    kb.button(text='🗑️ Удалить', callback_data=f'admin_delete_{product_id}')
-    # Для особых категорий кнопка назад ведет на выбор категорий
-    special_cats = ['tables', 'dressers', 'mattress', 'bed', 'wardrobe']
-    if category in special_cats:
-        kb.button(text='🔙 Назад', callback_data='admin_back_category')
-    else:
-        kb.button(text='🔙 Назад', callback_data='admin_back_type')
-    kb.adjust(1)
-    return kb.as_markup()
 
-def get_lead_manage_kb(lead_id, status):
-    kb = InlineKeyboardBuilder()
-    if status != 'Новая':
-        kb.button(text='🆕 Сделать новой', callback_data=f'lead_status_{lead_id}_new')
-    if status != 'В работе':
-        kb.button(text='🏃 В работу', callback_data=f'lead_status_{lead_id}_in_progress')
-    if status != 'Закрыта':
-        kb.button(text='✅ Закрыть', callback_data=f'lead_status_{lead_id}_closed')
-    kb.button(text='🗑️ Удалить', callback_data=f'lead_delete_{lead_id}')
-    kb.button(text='🔙 Назад', callback_data='admin_leads')
-    kb.adjust(1)
-    return kb.as_markup()
-
-def get_back_admin_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text='🔙 Назад', callback_data='admin_back_main')]])
-
-def get_edit_product_kb(product_id):
-    kb = InlineKeyboardBuilder()
-    kb.button(text='✏️ Название', callback_data=f'edit_name_{product_id}')
-    kb.button(text='🗂️ Категория', callback_data=f'edit_category_{product_id}')
-    kb.button(text='📝 Описание', callback_data=f'edit_description_{product_id}')
-    kb.button(text='📏 Размеры', callback_data=f'edit_sizes_{product_id}')
-    kb.button(text='🖼️ Фото', callback_data=f'edit_images_{product_id}')
-    kb.button(text='💰 Цена', callback_data=f'edit_price_{product_id}')
-    kb.button(text='🔙 Назад', callback_data='admin_manage_products')
-    kb.adjust(1)
-    return kb.as_markup()
-
-def get_admin_categories_kb():
-    from database.models import ProductCategory
-    kb = InlineKeyboardBuilder()
-    emoji_map = {
-        'bedroom': '🛏️',
-        'kitchen': '🍽️',
-        'soft': '🛋️',
-        'bed': '🛌',
-        'tables': '🪑',
-        'dressers': '🗄️',
-        'mattress': '🛌',
-        'wardrobe': '🚪',
-    }
-    # Новый порядок: bedroom, kitchen, soft, tables, dressers, mattress, bed, wardrobe
-    ordered = [
-        'bedroom',
-        'kitchen',
-        'soft',
-        'tables',
-        'dressers',
-        'mattress',
-        'bed',
-        'wardrobe',
+# Главное меню для админа
+admin_main_kb = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="➕ Добавить товар", callback_data="add_product")],
+        [InlineKeyboardButton(text="🗂️ Управление товарами", callback_data="manage_products")],
+        [InlineKeyboardButton(text="📋 Заявки (лиды)", callback_data="leads")],
+        [InlineKeyboardButton(text="🏠 На главное меню", callback_data="back_main")],
     ]
-    for cat_name in ordered:
-        cat = getattr(ProductCategory, cat_name)
-        emoji = emoji_map.get(cat_name, '')
-        kb.button(text=f'{emoji} {cat.value}', callback_data=f'admin_cat_{cat_name}')
-    kb.button(text='🔙 Назад', callback_data='admin_back_main')
-    kb.adjust(1)
-    return kb.as_markup()
+)
 
-def get_admin_countries_kb(category):
-    kb = InlineKeyboardBuilder()
-    kb.button(text='🇷🇺 Российская', callback_data=f'admin_country_{category}_Российская')
-    kb.button(text='🇹🇷 Турецкая', callback_data=f'admin_country_{category}_Турецкая')
-    # при возврате с выбора страны хотим вернуться на этап выбора категории
-    kb.button(text='🔙 Назад', callback_data='admin_back_category')
-    kb.adjust(1)
-    return kb.as_markup()
 
-def get_admin_types_kb(category, country):
-    kb = InlineKeyboardBuilder()
-    allowed_categories = ['kitchen', 'soft', 'Кухонная мебель', 'Мягкая мебель']
-    if category in allowed_categories and (country is None or country == 'Российская'):
-        kb.button(text='➡️ прямая', callback_data=f'admin_type_{category}_{country}_прямая')
-        kb.button(text='↩️ угловая', callback_data=f'admin_type_{category}_{country}_угловая')
-    kb.button(text='🔙 Назад', callback_data='admin_back_country')
-    kb.adjust(1)
-    return kb.as_markup()
 
-def get_add_product_step_kb():
-    kb = InlineKeyboardBuilder()
-    kb.button(text='⏭️ Пропустить', callback_data='skip_add')
-    kb.button(text='❌ Отмена', callback_data='cancel_add')
-    kb.adjust(1)
-    return kb.as_markup()
+# Клавиатура выбора категории товара (emoji прямо в тексте)
+def get_category_kb():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f"🛏️ Спальная мебель", callback_data="category_bedroom")],
+            [InlineKeyboardButton(text=f"🍽️ Кухонная мебель", callback_data="category_kitchen")],
+            [InlineKeyboardButton(text=f"🛋️ Мягкая мебель", callback_data="category_soft")],
+            [InlineKeyboardButton(text=f"🪑 Столы и стулья", callback_data="category_tables")],
+            [InlineKeyboardButton(text=f"🗄️ Тумбы и комоды", callback_data="category_dressers")],
+            [InlineKeyboardButton(text=f"🛌 Кровать", callback_data="category_bed")],
+            [InlineKeyboardButton(text=f"🛌 Матрасы", callback_data="category_mattress")],
+            [InlineKeyboardButton(text=f"🚪 Шкафы", callback_data="category_wardrobe")],
+        ]
+    )
 
-def get_edit_product_step_kb():
-    kb = InlineKeyboardBuilder()
-    kb.button(text='⏭️ Пропустить', callback_data='skip_edit')
-    kb.button(text='❌ Отмена', callback_data='cancel_edit')
-    kb.adjust(1)
-    return kb.as_markup()
+# Клавиатура выбора страны с emoji
+def get_country_kb():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🇷🇺 Российская", callback_data="country_russia")],
+            [InlineKeyboardButton(text="🇹🇷 Турецкая", callback_data="country_turkey")],
+            [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="country_skip_country")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="country_cancel_country")],
+        ]
+    )
 
-def get_categories_kb():
-    kb = InlineKeyboardBuilder()
-    for cat in ProductCategory:
-        print(f'Добавляю кнопку категории: {cat.value} ({cat.name})')  # DEBUG
-        kb.button(text=cat.value, callback_data=f'admin_cat_{cat.name}')
-    kb.adjust(1)
-    markup = kb.as_markup()
-    print(f'Клавиатура категорий: {markup}')  # DEBUG
-    return markup
+# Клавиатура выбора типа с emoji
+def get_type_kb():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➡️ Прямая", callback_data="type_straight")],
+            [InlineKeyboardButton(text="↩️ Угловая", callback_data="type_corner")],
+            [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="type_skip_type")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="type_cancel_type")],
+        ]
+    )
 
-def get_fsm_cancel_skip_kb():
-    kb = InlineKeyboardBuilder()
-    kb.button(text='❌ Отмена', callback_data='fsm_cancel')
-    kb.button(text='⏭️ Пропустить', callback_data='fsm_skip')
-    kb.adjust(2)
-    return kb.as_markup()
+# Клавиатура статусов лида
+lead_status_kb = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text=status.value, callback_data=f"lead_status_{status.name}")]
+        for status in LeadStatus
+    ]
+)
+
+def get_products_kb(products):
+    kb = InlineKeyboardMarkup()
+    for product in products:
+        kb.add(InlineKeyboardButton(text=product.name, callback_data=f"product_{product.id}"))
+    return kb
+
+def get_product_manage_kb(product_id):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"edit_{product_id}"),
+             InlineKeyboardButton(text="🗑️ Удалить", callback_data=f"delete_{product_id}")]
+        ]
+    )
+
+def get_leads_kb(leads):
+    kb = InlineKeyboardMarkup()
+    for lead in leads:
+        kb.add(InlineKeyboardButton(text=f"{lead.name} ({lead.status.value})", callback_data=f"lead_{lead.id}"))
+    return kb
+
+def get_lead_manage_kb(lead_id):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Изменить статус", callback_data=f"change_status_{lead_id}")],
+            [InlineKeyboardButton(text="Удалить", callback_data=f"delete_lead_{lead_id}")]
+        ]
+    )
+
+def get_add_step_kb():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="add_skip"),
+             InlineKeyboardButton(text="❌ Отмена", callback_data="add_cancel")]
+        ]
+    )
+
+def get_edit_fields_kb(fields):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=label, callback_data=f"editfield_{field}")]
+            for field, label in fields
+        ]
+    )
