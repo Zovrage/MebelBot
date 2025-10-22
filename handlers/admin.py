@@ -1,318 +1,331 @@
 from aiogram import Router, F
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
-from states.admin import ProductForm
-from keyboards.admin import get_admin_main_kb, get_add_product_step_kb, get_categories_kb
-from config import ADMIN_IDS
 from database.models import ProductCategory
+from database.crud import update_product
+from keyboards.admin import admin_main_kb, get_add_step_kb, get_country_kb, get_type_kb, get_edit_fields_kb
 from database.db import async_session
-from database.crud import add_product, add_photo
-import os
-import uuid
-from aiogram.filters import StateFilter
+from states.admin import EditProductForm, ProductForm
+
 
 router = Router()
 
-# --- Проверка администратора ---
-def is_admin(user_id):
-    return user_id in ADMIN_IDS
+# Вход в админ-панель
+@router.callback_query(F.data == 'admin_panel')
+async def admin_panel_entry(callback: CallbackQuery, state: FSMContext):
+    # Удаляем прошлое сообщение (меню пользователя)
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await callback.message.answer('Вы вошли в админ-панели.', reply_markup=admin_main_kb)
+    await callback.answer()
 
+# Редактирование товара: выбор поля
+@router.callback_query(F.data.startswith("edit_"))
+async def edit_product_start(callback: CallbackQuery, state: FSMContext):
+    product_id = int(callback.data.split("_", 1)[1])
+    await state.update_data(product_id=product_id)
+    fields = [
+        ("name", "Название"),
+        ("category", "Категория"),
+        ("subcategory", "Подкатегория"),
+        ("country", "Страна"),
+        ("type", "Тип"),
+        ("sizes", "Размер"),
+        ("price", "Цена"),
+        ("description", "Описание")
+    ]
+    kb = get_edit_fields_kb(fields)
+    await callback.message.answer("Выберите поле для редактирования:", reply_markup=kb)
+    await state.set_state(EditProductForm.waiting_for_field)
+    await callback.answer()
 
-@router.callback_query(F.data == 'admin_back_main')
-async def admin_back_main(call: CallbackQuery):
-    if not is_admin(call.from_user.id):
-        await call.answer('Нет доступа', show_alert=True)
-        return
-    await call.message.edit_text('Админ-панель', reply_markup=get_admin_main_kb())
+@router.callback_query(EditProductForm.waiting_for_field, F.data.startswith("editfield_"))
+async def edit_product_field(callback: CallbackQuery, state: FSMContext):
+    field = callback.data.split("_", 1)[1]
+    await state.update_data(field=field)
+    await callback.message.answer(f"Введите новое значение для поля: {field}")
+    await state.set_state(EditProductForm.waiting_for_value)
+    await callback.answer()
+
+@router.message(EditProductForm.waiting_for_value)
+async def edit_product_value(message: Message, state: FSMContext):
+    data = await state.get_data()
+    product_id = data["product_id"]
+    field = data["field"]
+    value = message.text
+    # Преобразование типов для некоторых полей
+    if field == "price":
+        try:
+            value = float(value.replace(",", "."))
+        except ValueError:
+            await message.answer("Введите корректную цену!")
+            return
+    if field == "category":
+        value = value if value in ProductCategory.__members__ else None
+        if not value:
+            await message.answer("Некорректная категория!")
+            return
+
+    async with async_session() as session:
+        await update_product(session, product_id, **{field: value})
+    await state.clear()
+    await message.answer("Товар обновлён.", reply_markup=admin_main_kb)
 
 # --- Добавление товара ---
-@router.callback_query(F.data == 'admin_add_product')
-async def admin_add_product(call: CallbackQuery, state: FSMContext):
-    if not is_admin(call.from_user.id):
-        await call.answer('Нет доступа', show_alert=True)
-        return
-    await call.message.answer('Введите название товара:', reply_markup=get_add_product_step_kb())
+@router.callback_query(F.data == 'add_product')
+async def add_product_start(callback: CallbackQuery, state: FSMContext):
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await state.clear()
     await state.set_state(ProductForm.waiting_for_name)
+    await callback.message.answer(
+        'Введите название товара:',
+        reply_markup=get_add_step_kb()
+    )
+    await callback.answer()
 
 @router.message(ProductForm.waiting_for_name)
-async def admin_product_name(msg: Message, state: FSMContext):
-    await state.update_data(name=msg.text)
-    await msg.answer('Выберите категорию:', reply_markup=get_categories_kb())
+async def add_product_name(message: Message, state: FSMContext):
+    if message.text:
+        await state.update_data(name=message.text)
     await state.set_state(ProductForm.waiting_for_category)
+    from keyboards.admin import get_category_kb
+    await message.answer('Выберите категорию товара:', reply_markup=get_category_kb())
 
-@router.callback_query(StateFilter(ProductForm.waiting_for_category), F.data.startswith('admin_cat_'))
-async def admin_product_category_callback(call: CallbackQuery, state: FSMContext):
-    cat_name = call.data.replace('admin_cat_', '')
-    await state.update_data(category=cat_name)
-    await call.message.edit_text('Введите подкатегорию (страна, тип и т.д.):', reply_markup=get_add_product_step_kb())
+@router.callback_query(ProductForm.waiting_for_category, F.data.startswith('category_'))
+async def add_product_category(callback: CallbackQuery, state: FSMContext):
+    category = callback.data.split('_', 1)[1]
+    await state.update_data(category=category)
     await state.set_state(ProductForm.waiting_for_subcategory)
+    await callback.message.answer('Введите подкатегорию (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
+    await callback.answer()
 
 @router.message(ProductForm.waiting_for_subcategory)
-async def admin_product_subcategory(msg: Message, state: FSMContext):
-    await state.update_data(subcategory=msg.text)
-    await msg.answer('Страна производства:', reply_markup=get_add_product_step_kb())
-    await state.set_state(ProductForm.waiting_for_country)
+async def add_product_subcategory(message: Message, state: FSMContext):
+    await state.update_data(subcategory=message.text)
+    data = await state.get_data()
+    category = data.get('category')
+    if category in ['soft', 'bedroom']:
+        await state.set_state(ProductForm.waiting_for_country)
+        await message.answer('Выберите страну производства:', reply_markup=get_country_kb())
+    elif category == 'kitchen':
+        await state.set_state(ProductForm.waiting_for_type)
+        await message.answer('Выберите тип товара:', reply_markup=get_type_kb())
+    else:
+        await state.set_state(ProductForm.waiting_for_sizes)
+        await message.answer('Введите размер (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
+
+@router.callback_query(ProductForm.waiting_for_country, F.data.startswith('country_'))
+async def add_product_country_callback(callback: CallbackQuery, state: FSMContext):
+    code = callback.data.split('_', 1)[1]
+    if code == 'skip_country':
+        await state.update_data(country=None)
+    else:
+        await state.update_data(country=code)
+    data = await state.get_data()
+    category = data.get('category')
+    country = code
+    if category in ['soft', 'bedroom']:
+        if country == 'russia':
+            await state.set_state(ProductForm.waiting_for_type)
+            await callback.message.edit_text('Выберите тип товара:', reply_markup=get_type_kb())
+        else:
+            await state.set_state(ProductForm.waiting_for_sizes)
+            await callback.message.edit_text('Введите размер (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
+    elif category == 'kitchen':
+        await state.set_state(ProductForm.waiting_for_type)
+        await callback.message.edit_text('Выберите тип товара:', reply_markup=get_type_kb())
+    else:
+        await state.set_state(ProductForm.waiting_for_sizes)
+        await callback.message.edit_text('Введите размер (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
+    await callback.answer()
 
 @router.message(ProductForm.waiting_for_country)
-async def admin_product_country(msg: Message, state: FSMContext):
-    await state.update_data(country=msg.text)
-    await msg.answer('Тип (прямая, угловая и т.д.):', reply_markup=get_add_product_step_kb())
-    await state.set_state(ProductForm.waiting_for_type)
+async def add_product_country_text(message: Message, state: FSMContext):
+    await state.update_data(country=message.text)
+    data = await state.get_data()
+    category = data.get('category')
+    country = message.text.lower()
+    if category in ['soft', 'bedroom']:
+        if country == 'russia' or country == 'россия':
+            await state.set_state(ProductForm.waiting_for_type)
+            await message.answer('Выберите тип товара:', reply_markup=get_type_kb())
+        else:
+            await state.set_state(ProductForm.waiting_for_sizes)
+            await message.answer('Введите размер (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
+    elif category == 'kitchen':
+        await state.set_state(ProductForm.waiting_for_type)
+        await message.answer('Выберите тип товара:', reply_markup=get_type_kb())
+    else:
+        await state.set_state(ProductForm.waiting_for_sizes)
+        await message.answer('Введите размер (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
+
+@router.callback_query(ProductForm.waiting_for_type, F.data.startswith('type_'))
+async def add_product_type_callback(callback: CallbackQuery, state: FSMContext):
+    code = callback.data.split('_', 1)[1]
+    if code == 'skip_type':
+        await state.update_data(type=None)
+    else:
+        await state.update_data(type=code)
+    data = await state.get_data()
+    category = data.get('category')
+    if category == 'soft':
+        await state.set_state(ProductForm.waiting_for_country)
+        await callback.message.edit_text('Выберите страну производства:', reply_markup=get_country_kb())
+    elif category == 'kitchen':
+        await state.set_state(ProductForm.waiting_for_sizes)
+        await callback.message.edit_text('Введите размер (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
+    else:
+        await state.set_state(ProductForm.waiting_for_sizes)
+        await callback.message.edit_text('Введите размер (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
+    await callback.answer()
 
 @router.message(ProductForm.waiting_for_type)
-async def admin_product_type(msg: Message, state: FSMContext):
-    await state.update_data(type=msg.text)
-    await msg.answer('Цена:', reply_markup=get_add_product_step_kb())
-    await state.set_state(ProductForm.waiting_for_price)
-
-@router.message(ProductForm.waiting_for_price)
-async def admin_product_price(msg: Message, state: FSMContext):
-    try:
-        price = float(msg.text)
-    except ValueError:
-        await msg.answer('Введите число (цена):', reply_markup=get_add_product_step_kb())
-        return
-    await state.update_data(price=price)
-    await msg.answer('Описание:', reply_markup=get_add_product_step_kb())
-    await state.set_state(ProductForm.waiting_for_description)
-
-@router.message(ProductForm.waiting_for_description)
-async def admin_product_description(msg: Message, state: FSMContext):
-    await state.update_data(description=msg.text)
-    await msg.answer('Введите размеры товара (например, 200x80x40 см):', reply_markup=get_add_product_step_kb())
-    await state.set_state(ProductForm.waiting_for_sizes)
+async def add_product_type_text(message: Message, state: FSMContext):
+    await state.update_data(type=message.text)
+    data = await state.get_data()
+    category = data.get('category')
+    if category == 'soft':
+        await state.set_state(ProductForm.waiting_for_country)
+        await message.answer('Выберите страну производства:', reply_markup=get_country_kb())
+    elif category == 'kitchen':
+        await state.set_state(ProductForm.waiting_for_sizes)
+        await message.answer('Введите размер (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
+    else:
+        await state.set_state(ProductForm.waiting_for_sizes)
+        await message.answer('Введите размер (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
 
 @router.message(ProductForm.waiting_for_sizes)
-async def admin_product_sizes(msg: Message, state: FSMContext):
-    await state.update_data(sizes=msg.text)
-    await msg.answer('Отправьте 1-5 фото товара (по одному сообщению, когда закончите — напишите "Готово"):')
+async def add_product_sizes(message: Message, state: FSMContext):
+    await state.update_data(sizes=message.text)
+    await state.set_state(ProductForm.waiting_for_price)
+    await message.answer('Введите цену (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
+
+@router.message(ProductForm.waiting_for_price)
+async def add_product_price(message: Message, state: FSMContext):
+    try:
+        price = float(message.text.replace(',', '.'))
+    except Exception:
+        price = None
+    await state.update_data(price=price)
+    await state.set_state(ProductForm.waiting_for_description)
+    await message.answer('Введите описание (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
+
+@router.message(ProductForm.waiting_for_description)
+async def add_product_description(message: Message, state: FSMContext):
+    await state.update_data(description=message.text)
     await state.set_state(ProductForm.waiting_for_images)
-    await state.update_data(images=[])
+    await message.answer('Отправьте фото товара (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
 
 @router.message(ProductForm.waiting_for_images, F.photo)
-async def admin_product_image(msg: Message, state: FSMContext):
-    data = await state.get_data()
-    images = data.get('images', [])
-    if len(images) >= 5:
-        await msg.answer('Максимум 5 фото. Напишите "Готово" если закончили.')
-        return
-    file_id = msg.photo[-1].file_id
-    images.append(file_id)
-    await state.update_data(images=images)
-    await msg.answer(f'Фото добавлено ({len(images)}/5). Ещё фото или "Готово".')
+async def add_product_images(message: Message, state: FSMContext):
+    # Для простоты: сохраняем file_id первой фотографии
+    await state.update_data(images=message.photo[-1].file_id)
+    await finish_add_product(message, state)
 
-@router.message(ProductForm.waiting_for_images, F.text.lower() == 'готово')
-async def admin_product_images_done(msg: Message, state: FSMContext):
-    data = await state.get_data()
-    images = data.get('images', [])
-    async with async_session() as session:
-        product = await add_product(session,
-            name=data['name'],
-            category=data['category'],
-            subcategory=data['subcategory'],
-            country=data['country'],
-            type=data['type'],
-            price=data['price'],
-            description=data['description'],
-            sizes=data.get('sizes'),
-            images=None  # images теперь не нужны
-        )
-        # Сохраняем фото в media и записываем в Photo
-        for idx, file_id in enumerate(images):
-            file = await msg.bot.get_file(file_id)
-            ext = os.path.splitext(file.file_path)[-1] or '.jpg'
-            filename = f"product_{product.id}_{uuid.uuid4().hex}{ext}"
-            file_path = os.path.join('media', filename)
-            await msg.bot.download_file(file.file_path, file_path)
-            await add_photo(session, product_id=product.id, filename=filename, original_file_id=file_id)
-    await msg.answer('Товар добавлен!', reply_markup=get_admin_main_kb())
-    await state.clear()
+@router.message(ProductForm.waiting_for_images)
+async def add_product_images_text(message: Message, state: FSMContext):
+    # Если не фото, а текст — пропускаем
+    await finish_add_product(message, state)
 
-@router.callback_query(F.data == 'cancel_add')
-async def cancel_add_product(call: CallbackQuery, state: FSMContext):
-    await state.clear()
-    await call.message.answer('Добавление товара отменено.', reply_markup=get_admin_main_kb())
-
-@router.callback_query(F.data == 'skip_add')
-async def skip_add_product(call: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
+@router.callback_query(F.data == 'add_skip')
+async def add_product_skip(callback: CallbackQuery, state: FSMContext):
     current_state = await state.get_state()
-    # Переход к следующему шагу, сохраняя None
-    if current_state == ProductForm.waiting_for_name.state:
-        await state.update_data(name=None)
-        cats = [c.value for c in ProductCategory]
-        await call.message.answer(f'Выберите категорию:')
-        await state.set_state(ProductForm.waiting_for_category)
-    elif current_state == ProductForm.waiting_for_category.state:
-        await state.update_data(category=None)
-        await call.message.answer('Введите подкатегорию (страна, тип и т.д.):')
-        await state.set_state(ProductForm.waiting_for_subcategory)
-    elif current_state == ProductForm.waiting_for_subcategory.state:
+    data = await state.get_data()
+    category = data.get('category')
+    # Пропуск — просто пустое значение
+    if current_state == ProductForm.waiting_for_subcategory.state:
         await state.update_data(subcategory=None)
-        await call.message.answer('Страна производства:')
-        await state.set_state(ProductForm.waiting_for_country)
+        # Логика следующего шага как в add_product_subcategory
+        if category == 'soft':
+            await state.set_state(ProductForm.waiting_for_country)
+            await callback.message.answer('Выберите страну производства:', reply_markup=get_country_kb())
+        elif category == 'bedroom':
+            await state.set_state(ProductForm.waiting_for_country)
+            await callback.message.answer('Выберите страну производства:', reply_markup=get_country_kb())
+        elif category == 'kitchen':
+            await state.set_state(ProductForm.waiting_for_type)
+            await callback.message.answer('Выберите тип товара:', reply_markup=get_type_kb())
+        else:
+            await state.set_state(ProductForm.waiting_for_sizes)
+            await callback.message.answer('Введите размер (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
     elif current_state == ProductForm.waiting_for_country.state:
         await state.update_data(country=None)
-        await call.message.answer('Тип (прямая, угловая и т.д.):')
-        await state.set_state(ProductForm.waiting_for_type)
+        # После страны всегда размер
+        await state.set_state(ProductForm.waiting_for_sizes)
+        await callback.message.answer('Введите размер (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
     elif current_state == ProductForm.waiting_for_type.state:
         await state.update_data(type=None)
-        await call.message.answer('Цена:')
-        await state.set_state(ProductForm.waiting_for_price)
-    elif current_state == ProductForm.waiting_for_price.state:
-        await state.update_data(price=None)
-        await call.message.answer('Описание:')
-        await state.set_state(ProductForm.waiting_for_description)
-    elif current_state == ProductForm.waiting_for_description.state:
-        await state.update_data(description=None)
-        await call.message.answer('Введите размеры товара (например, 200x80x40 см):')
-        await state.set_state(ProductForm.waiting_for_sizes)
+        # Логика следующего шага как in add_product_type_callback
+        if category == 'soft':
+            await state.set_state(ProductForm.waiting_for_country)
+            await callback.message.answer('Выберите страну производства:', reply_markup=get_country_kb())
+        elif category == 'kitchen':
+            await state.set_state(ProductForm.waiting_for_sizes)
+            await callback.message.answer('Введите размер (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
+        else:
+            await state.set_state(ProductForm.waiting_for_sizes)
+            await callback.message.answer('Введите размер (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
     elif current_state == ProductForm.waiting_for_sizes.state:
         await state.update_data(sizes=None)
-        await call.message.answer('Отправьте 1-5 фото товара (по одному сообщению, когда закончите — напишите "Готово"):')
+        await state.set_state(ProductForm.waiting_for_price)
+        await callback.message.answer('Введите цену (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
+    elif current_state == ProductForm.waiting_for_price.state:
+        await state.update_data(price=None)
+        await state.set_state(ProductForm.waiting_for_description)
+        await callback.message.answer('Введите описание (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
+    elif current_state == ProductForm.waiting_for_description.state:
+        await state.update_data(description=None)
         await state.set_state(ProductForm.waiting_for_images)
+        await callback.message.answer('Отправьте фото товара (или ⏭️ Пропустить):', reply_markup=get_add_step_kb())
     elif current_state == ProductForm.waiting_for_images.state:
         await state.update_data(images=None)
-        # Завершить добавление, если фото пропущены
-        async with async_session() as session:
-            await add_product(session,
-                name=data.get('name'),
-                category=data.get('category'),
-                subcategory=data.get('subcategory'),
-                country=data.get('country'),
-                type=data.get('type'),
-                price=data.get('price'),
-                description=data.get('description'),
-                sizes=None,
-                images=None
-            )
-        await call.message.answer('Товар добавлен (без фото).', reply_markup=get_admin_main_kb())
-        await state.clear()
+        # Завершить добавление
+        await finish_add_product(callback.message, state)
+    await callback.answer()
 
-@router.callback_query(ProductForm.waiting_for_name, F.data == 'cancel_add')
-async def cancel_add_name(call: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data == 'add_cancel')
+async def add_product_cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await call.message.answer('Добавление товара отменено.', reply_markup=get_admin_main_kb())
+    await callback.message.answer('Добавление товара отменено.', reply_markup=admin_main_kb)
+    await callback.answer()
 
-@router.callback_query(ProductForm.waiting_for_category, F.data == 'cancel_add')
-async def cancel_add_category(call: CallbackQuery, state: FSMContext):
+@router.callback_query(ProductForm.waiting_for_country, F.data == 'country_cancel_country')
+async def cancel_country(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await call.message.answer('Добавление товара отменено.', reply_markup=get_admin_main_kb())
+    await callback.message.edit_text('Добавление товара отменено.', reply_markup=admin_main_kb)
+    await callback.answer()
 
-@router.callback_query(ProductForm.waiting_for_subcategory, F.data == 'cancel_add')
-async def cancel_add_subcategory(call: CallbackQuery, state: FSMContext):
+@router.callback_query(ProductForm.waiting_for_type, F.data == 'type_cancel_type')
+async def cancel_type(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await call.message.answer('Добавление товара отменено.', reply_markup=get_admin_main_kb())
+    await callback.message.edit_text('Добавление товара отменено.', reply_markup=admin_main_kb)
+    await callback.answer()
 
-@router.callback_query(ProductForm.waiting_for_country, F.data == 'cancel_add')
-async def cancel_add_country(call: CallbackQuery, state: FSMContext):
+async def finish_add_product(message: Message, state: FSMContext):
+    data = await state.get_data()
+    from database.db import async_session
+    from database.crud import add_product
+    # Преобразование категории
+    if 'category' in data and data['category']:
+        from database.models import ProductCategory
+        data['category'] = ProductCategory[data['category']]
+    async with async_session() as session:
+        await add_product(session, **data)
     await state.clear()
-    await call.message.answer('Добавление товара отменено.', reply_markup=get_admin_main_kb())
+    await message.answer('Товар успешно добавлен!', reply_markup=admin_main_kb)
 
-@router.callback_query(ProductForm.waiting_for_type, F.data == 'cancel_add')
-async def cancel_add_type(call: CallbackQuery, state: FSMContext):
-    await state.clear()
-    await call.message.answer('Добавление товара отменено.', reply_markup=get_admin_main_kb())
-
-@router.callback_query(ProductForm.waiting_for_price, F.data == 'cancel_add')
-async def cancel_add_price(call: CallbackQuery, state: FSMContext):
-    await state.clear()
-    await call.message.answer('Добавление товара отменено.', reply_markup=get_admin_main_kb())
-
-@router.callback_query(ProductForm.waiting_for_description, F.data == 'cancel_add')
-async def cancel_add_description(call: CallbackQuery, state: FSMContext):
-    await state.clear()
-    await call.message.answer('Добавление товара отменено.', reply_markup=get_admin_main_kb())
-
-@router.callback_query(ProductForm.waiting_for_images, F.data == 'cancel_add')
-async def cancel_add_images(call: CallbackQuery, state: FSMContext):
-    await state.clear()
-    await call.message.answer('Добавление товара отменено.', reply_markup=get_admin_main_kb())
-
-@router.callback_query(ProductForm.waiting_for_name, F.data == 'skip_add')
-async def skip_add_name(call: CallbackQuery, state: FSMContext):
-    await state.update_data(name=None)
-    cats = [c.value for c in ProductCategory]
-    await call.message.answer(f'Выберите категорию:')
-    await state.set_state(ProductForm.waiting_for_category)
-
-@router.callback_query(ProductForm.waiting_for_category, F.data == 'skip_add')
-async def skip_add_category(call: CallbackQuery, state: FSMContext):
-    await state.update_data(category=None)
-    await call.message.answer('Введите подкатегорию (страна, тип и т.д.):')
-    await state.set_state(ProductForm.waiting_for_subcategory)
-
-@router.callback_query(ProductForm.waiting_for_subcategory, F.data == 'skip_add')
-async def skip_add_subcategory(call: CallbackQuery, state: FSMContext):
-    await state.update_data(subcategory=None)
-    await call.message.answer('Страна производства:')
-    await state.set_state(ProductForm.waiting_for_country)
-
-@router.callback_query(ProductForm.waiting_for_country, F.data == 'skip_add')
-async def skip_add_country(call: CallbackQuery, state: FSMContext):
-    await state.update_data(country=None)
-    await call.message.answer('Тип (прямая, угловая и т.д.):')
-    await state.set_state(ProductForm.waiting_for_type)
-
-@router.callback_query(ProductForm.waiting_for_type, F.data == 'skip_add')
-async def skip_add_type(call: CallbackQuery, state: FSMContext):
-    await state.update_data(type=None)
-    await call.message.answer('Цена:')
-    await state.set_state(ProductForm.waiting_for_price)
-
-@router.callback_query(ProductForm.waiting_for_price, F.data == 'skip_add')
-async def skip_add_price(call: CallbackQuery, state: FSMContext):
-    await state.update_data(price=None)
-    await call.message.answer('Описание:')
-    await state.set_state(ProductForm.waiting_for_description)
-
-@router.callback_query(ProductForm.waiting_for_description, F.data == 'skip_add')
-async def skip_add_description(call: CallbackQuery, state: FSMContext):
-    await state.update_data(description=None)
-    await call.message.answer('Введите размеры товара (например, 200x80x40 см):')
-    await state.set_state(ProductForm.waiting_for_sizes)
-
-@router.callback_query(ProductForm.waiting_for_sizes, F.data == 'skip_add')
-async def skip_add_sizes(call: CallbackQuery, state: FSMContext):
-    await state.update_data(sizes=None)
-    await call.message.answer('Отправьте 1-5 фото товара (по одному сообщению, когда закончите — напишите "Готово"):')
-    await state.set_state(ProductForm.waiting_for_images)
-
-@router.callback_query(StateFilter(ProductForm.waiting_for_name))
-async def ask_name_step(call: CallbackQuery, state: FSMContext):
-    await call.message.answer('Введите название товара:')
-
-@router.callback_query(StateFilter(ProductForm.waiting_for_category))
-async def ask_category_step(call: CallbackQuery, state: FSMContext):
-    await call.message.answer('Выберите категорию:')
-
-@router.callback_query(StateFilter(ProductForm.waiting_for_subcategory))
-async def ask_subcategory_step(call: CallbackQuery, state: FSMContext):
-    await call.message.answer('Введите подкатегорию (страна, тип и т.д.):')
-
-@router.callback_query(StateFilter(ProductForm.waiting_for_country))
-async def ask_country_step(call: CallbackQuery, state: FSMContext):
-    await call.message.answer('Страна производства:')
-
-@router.callback_query(StateFilter(ProductForm.waiting_for_type))
-async def ask_type_step(call: CallbackQuery, state: FSMContext):
-    await call.message.answer('Тип (прямая, угловая и т.д.):')
-
-@router.callback_query(StateFilter(ProductForm.waiting_for_price))
-async def ask_price_step(call: CallbackQuery, state: FSMContext):
-    await call.message.answer('Цена:')
-
-@router.callback_query(StateFilter(ProductForm.waiting_for_description))
-async def ask_description_step(call: CallbackQuery, state: FSMContext):
-    await call.message.answer('Описание:')
-
-@router.callback_query(StateFilter(ProductForm.waiting_for_images))
-async def ask_images_step(call: CallbackQuery, state: FSMContext):
-    await call.message.answer('Отправьте 1-5 фото товара (по одному сообщению, когда закончите — напишите "Готово"):')
-@router.callback_query(F.data == 'admin_manage_products')
-async def admin_manage_products(call: CallbackQuery):
-    if not is_admin(call.from_user.id):
-        await call.answer('Нет доступа', show_alert=True)
-        return
-    from keyboards.admin import get_admin_categories_kb
-    await call.message.edit_text('Выберите категорию:', reply_markup=get_admin_categories_kb())
+# Обработка возврата на главное меню
+@router.callback_query(F.data == 'back_main')
+async def back_to_main_menu(callback: CallbackQuery, state: FSMContext):
+    from keyboards.user import main_menu_kb
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await callback.message.answer('Главное меню', reply_markup=main_menu_kb)
+    await callback.answer()

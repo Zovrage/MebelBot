@@ -8,13 +8,27 @@ from .db import Base
 
 
 class ProductCategory(enum.Enum):
-    bedroom = 'Спальная мебель'
-    kitchen = 'Кухонная мебель'
-    soft = 'Мягкая мебель'
-    tables = 'Столы и стулья'
-    dressers = 'Тумбы и комоды'
-    mattress = 'Матрасы'
-    wardrobe = 'Шкафы'
+    bedroom = 'bedroom'
+    kitchen = 'kitchen'
+    soft = 'soft'
+    tables = 'tables'
+    dressers = 'dressers'
+    beds = 'beds'
+    mattress = 'mattress'
+    wardrobe = 'wardrobe'
+
+
+CATEGORY_DISPLAY = {
+    ProductCategory.bedroom: 'Спальная мебель',
+    ProductCategory.kitchen: 'Кухонная мебель',
+    ProductCategory.soft: 'Мягкая мебель',
+    ProductCategory.tables: 'Столы и стулья',
+    ProductCategory.dressers: 'Тумбы и комоды',
+    ProductCategory.beds: 'Кровати',
+    ProductCategory.mattress: 'Матрасы',
+    ProductCategory.wardrobe: 'Шкафы',
+}
+
 
 
 class Product(Base):

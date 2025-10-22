@@ -8,6 +8,7 @@ main_menu_kb = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text='🛋️ Мягкая мебель', callback_data='cat_soft')],
     [InlineKeyboardButton(text='🪑 Столы и стулья', callback_data='cat_tables')],
     [InlineKeyboardButton(text='🗄️ Тумбы и комоды', callback_data='cat_dressers')],
+    [InlineKeyboardButton(text='🛌 Кровати', callback_data='cat_beds')],
     [InlineKeyboardButton(text='🛌 Матрасы', callback_data='cat_mattress')],
     [InlineKeyboardButton(text='🚪 Шкафы', callback_data='cat_wardrobe')],
     [InlineKeyboardButton(text='ℹ️ О компании / Контакты', callback_data='about')],
