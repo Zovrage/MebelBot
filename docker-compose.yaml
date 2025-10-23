@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  app:
+    build: .
+    container_name: mebelbot_app
+    working_dir: /app
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: python main.py
+    restart: unless-stopped
+

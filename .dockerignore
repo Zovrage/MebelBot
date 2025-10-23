@@ -1,0 +1,21 @@
+# Исключения для Docker
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+.idea/
+.vscode/
+*.log
+*.pid
+*.tmp
+*.bak
+*.swp
+media/
+*.db
+config.py
+.DS_Store
+Thumbs.db
+
