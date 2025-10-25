@@ -1,278 +1,163 @@
 from aiogram import Router, F
 from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
+import os
+import time
 
-from keyboards.admin.add_product import get_skip_cancel_kb, get_confirm_add_kb, get_country_kb, get_type_kb, get_images_done_kb, get_category_kb
-from keyboards.admin.admin import admin_main_kb
-from database.crud import add_product
-from database.db import async_session
+from keyboards.admin.add_product import (
+    get_category_kb, get_country_kb, get_type_kb,
+    get_images_done_kb
+)
 from states.admin import ProductForm
+from database.db import async_session
+from database.crud import add_product, add_photo, update_product
+from database.models import ProductCategory
 
 router = Router()
 
-# Добавление товара
+MEDIA_DIR = os.path.join(os.getcwd(), "media")
+os.makedirs(MEDIA_DIR, exist_ok=True)
+
+# Начало добавления товара (строго пошагово)
 @router.callback_query(F.data == "add_product")
 async def add_product_start(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete()
-    await callback.message.answer("Введите название товара:", reply_markup=get_skip_cancel_kb())
+    await state.clear()
+    await callback.message.answer("Введите название товара:")
     await state.set_state(ProductForm.waiting_for_name)
     await callback.answer()
 
-# Обработка названия товара
 @router.message(ProductForm.waiting_for_name)
-async def add_product_name(message: Message, state: FSMContext):
+async def add_name(message: Message, state: FSMContext):
     await state.update_data(name=message.text)
-    await message.answer("Выберите категорию товара:", reply_markup=get_category_kb())
+    await message.answer("Выберите категорию:", reply_markup=get_category_kb())
     await state.set_state(ProductForm.waiting_for_category)
 
-# Callback для пропуска названия
-@router.callback_query(ProductForm.waiting_for_name, F.data == "add_skip")
-async def skip_name(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(name=None)
-    await callback.message.answer("Выберите категорию товара:", reply_markup=get_category_kb())
-    await state.set_state(ProductForm.waiting_for_category)
-    await callback.answer()
-
-# Callback для отмены добавления товара
-@router.callback_query(ProductForm.waiting_for_name, F.data == "add_cancel")
-async def cancel_add_product(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete()
-    await callback.message.answer("⚙️ Админская панель", reply_markup=admin_main_kb)
-    await state.clear()
-    await callback.answer()
-
-# Callback для выбора категории
 @router.callback_query(ProductForm.waiting_for_category, F.data.startswith("category_"))
-async def add_product_category_callback(callback: CallbackQuery, state: FSMContext):
-    category = callback.data.replace("category_", "")
+async def add_choose_category(callback: CallbackQuery, state: FSMContext):
+    code = callback.data.replace("category_", "")
+    try:
+        category = ProductCategory[code]
+    except Exception:
+        category = code
     await state.update_data(category=category)
-    await callback.message.answer("Введите подкатегорию товара:", reply_markup=get_skip_cancel_kb())
+    await callback.message.answer("Введите подкатегорию (при необходимости, иначе напишите -):")
     await state.set_state(ProductForm.waiting_for_subcategory)
     await callback.answer()
 
-# Callback для пропуска категории
-@router.callback_query(ProductForm.waiting_for_category, F.data == "add_skip")
-async def skip_category(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(category=None)
-    await callback.message.answer("Введите подкатегорию товара:", reply_markup=get_skip_cancel_kb())
-    await state.set_state(ProductForm.waiting_for_subcategory)
-    await callback.answer()
-
-# Callback для отмены добавления товара
-@router.callback_query(ProductForm.waiting_for_category, F.data == "add_cancel")
-async def cancel_add_product_category(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete()
-    await callback.message.answer("⚙️ Админская панель", reply_markup=admin_main_kb)
-    await state.clear()
-    await callback.answer()
-
-# Обработка подкатегории товара
 @router.message(ProductForm.waiting_for_subcategory)
-async def add_product_subcategory(message: Message, state: FSMContext):
+async def add_subcategory(message: Message, state: FSMContext):
     await state.update_data(subcategory=message.text)
-    data = await state.get_data()
-    category = data.get('category')
-    # Страна только для мягкой и спальной мебели
-    if category in ('soft', 'bedroom'):
-        await message.answer("Выберите страну производства:", reply_markup=get_country_kb())
-        await state.set_state(ProductForm.waiting_for_country)
-    elif category in ('kitchen'):
-        # Для кухни сразу к типу
-        await message.answer("Выберите тип товара:", reply_markup=get_type_kb())
-        await state.set_state(ProductForm.waiting_for_type)
-    else:
-        # Для остальных категорий сразу к размерам
-        await message.answer("Введите размеры товара:", reply_markup=get_skip_cancel_kb())
-        await state.set_state(ProductForm.waiting_for_sizes)
+    await message.answer("Выберите страну производства:", reply_markup=get_country_kb())
+    await state.set_state(ProductForm.waiting_for_country)
 
-# Callback для пропуска подкатегории
-@router.callback_query(ProductForm.waiting_for_subcategory, F.data == "add_skip")
-async def skip_subcategory(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(subcategory=None)
-    data = await state.get_data()
-    category = data.get('category')
-    if category in ('soft', 'bedroom'):
-        await callback.message.answer("Выберите страну производства:", reply_markup=get_country_kb())
-        await state.set_state(ProductForm.waiting_for_country)
-    elif category in ('kitchen'):
-        await callback.message.answer("Выберите тип товара:", reply_markup=get_type_kb())
-        await state.set_state(ProductForm.waiting_for_type)
-    else:
-        await callback.message.answer("Введите размеры товара:", reply_markup=get_skip_cancel_kb())
-        await state.set_state(ProductForm.waiting_for_sizes)
-    await callback.answer()
-
-# Callback для отмены добавления товара
-@router.callback_query(ProductForm.waiting_for_category, F.data == "add_cancel")
-async def cancel_add_product_subcategory(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete()
-    await callback.message.answer("⚙️ Админская панель", reply_markup=admin_main_kb)
-    await state.clear()
-    await callback.answer()
-
-# Callback для выбора страны
 @router.callback_query(ProductForm.waiting_for_country, F.data.startswith("country_"))
-async def add_product_country(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    category = data.get('category')
-    country = None
-    if callback.data == "country_skip_country":
-        await state.update_data(country=None)
-    elif callback.data == "country_cancel_country":
-        await callback.message.delete()
-        await callback.message.answer("⚙️ Админская панель", reply_markup=admin_main_kb)
-        await state.clear()
-        await callback.answer()
-        return
-    else:
-        country = callback.data.replace("country_", "")
-        await state.update_data(country=country)
-    # Тип только для мягкой мебели (если страна не Турция) и для кухни
-    if (category == 'soft' and country != 'turkey') or category == 'kitchen':
-        await callback.message.answer("Выберите тип товара:", reply_markup=get_type_kb())
-        await state.set_state(ProductForm.waiting_for_type)
-    else:
-        await callback.message.answer("Введите размеры товара:", reply_markup=get_skip_cancel_kb())
-        await state.set_state(ProductForm.waiting_for_sizes)
+async def add_choose_country(callback: CallbackQuery, state: FSMContext):
+    country = callback.data.replace("country_", "")
+    if country in ("skip_country", "cancel_country"):
+        country = "-"
+    await state.update_data(country=country)
+    await callback.message.answer("Выберите тип:", reply_markup=get_type_kb())
+    await state.set_state(ProductForm.waiting_for_type)
     await callback.answer()
 
-# Callback для выбора типа
 @router.callback_query(ProductForm.waiting_for_type, F.data.startswith("type_"))
-async def add_product_type(callback: CallbackQuery, state: FSMContext):
-    if callback.data == "type_skip_type":
-        await state.update_data(type=None)
-    elif callback.data == "type_cancel_type":
-        await callback.message.delete()
-        await callback.message.answer("⚙️ Админская панель", reply_markup=admin_main_kb)
-        await state.clear()
+async def add_choose_type(callback: CallbackQuery, state: FSMContext):
+    type_code = callback.data.replace("type_", "")
+    if type_code in ("skip_type", "cancel_type"):
+        type_code = "-"
+    await state.update_data(type=type_code)
+    await callback.message.answer("Введите цену (только цифры, можно с точкой):")
+    await state.set_state(ProductForm.waiting_for_price)
+    await callback.answer()
+
+@router.message(ProductForm.waiting_for_price)
+async def add_price(message: Message, state: FSMContext):
+    text = message.text.replace(" ", "")
+    try:
+        price = float(text)
+    except Exception:
+        await message.answer("Неверный формат цены. Введите цифры, можно с точкой.")
+        return
+    await state.update_data(price=price)
+    await message.answer("Отправьте фото товара (можно несколько). Нажмите '✅ Готово' когда закончите.", reply_markup=get_images_done_kb())
+    await state.update_data(images=[])
+    await state.set_state(ProductForm.waiting_for_images)
+
+@router.message(ProductForm.waiting_for_images, F.content_type == "photo")
+async def add_images_receive(message: Message, state: FSMContext):
+    photo = message.photo[-1]
+    file = await message.bot.get_file(photo.file_id)
+    ts = int(time.time() * 1000)
+    filename = f"product_tmp_{ts}_{photo.file_id}.jpg"
+    file_path = os.path.join(MEDIA_DIR, filename)
+    await message.bot.download_file(file.file_path, file_path)
+    data = await state.get_data() or {}
+    images = data.get("images", []) or []
+    images.append(file_path)
+    await state.update_data(images=images)
+    await message.answer("Фото принято. Можете отправить ещё или нажать '✅ Готово'.", reply_markup=get_images_done_kb())
+
+@router.callback_query(ProductForm.waiting_for_images, F.data == "images_done")
+async def images_done(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data() or {}
+    name = data.get("name")
+    category = data.get("category")
+    subcategory = data.get("subcategory")
+    country = data.get("country")
+    type_ = data.get("type")
+    price = data.get("price")
+    images = data.get("images", []) or []
+
+    if not name:
+        await callback.message.answer("Нельзя сохранить товар без названия. Укажите название.")
         await callback.answer()
         return
+
+    if isinstance(category, ProductCategory):
+        category_val = category
     else:
-        type_ = callback.data.replace("type_", "")
-        await state.update_data(type=type_)
-    await callback.message.answer("Введите размеры товара:", reply_markup=get_skip_cancel_kb())
-    await state.set_state(ProductForm.waiting_for_sizes)
-    await callback.answer()
+        try:
+            category_val = ProductCategory[category]
+        except Exception:
+            category_val = category
 
-# Обработка размеров товара
-@router.message(ProductForm.waiting_for_sizes)
-async def add_product_sizes(message: Message, state: FSMContext):
-    await state.update_data(sizes=message.text)
-    await message.answer("Введите цену товара:", reply_markup=get_skip_cancel_kb())
-    await state.set_state(ProductForm.waiting_for_price)
-
-# Callback для пропуска размеров
-@router.callback_query(ProductForm.waiting_for_sizes, F.data == "add_skip")
-async def skip_sizes(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(sizes=None)
-    await callback.message.answer("Введите цену товара:", reply_markup=get_skip_cancel_kb())
-    await state.set_state(ProductForm.waiting_for_price)
-    await callback.answer()
-
-# Callback для отмены добавления товара
-@router.callback_query(ProductForm.waiting_for_sizes, F.data == "add_cancel")
-async def cancel_add_product_sizes(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete()
-    await callback.message.answer("⚙️ Админская панель", reply_markup=admin_main_kb)
-    await state.clear()
-    await callback.answer()
-
-# Обработка цены товара
-@router.message(ProductForm.waiting_for_price)
-async def add_product_price(message: Message, state: FSMContext):
-    await state.update_data(price=message.text)
-    await message.answer("Введите описание товара:", reply_markup=get_skip_cancel_kb())
-    await state.set_state(ProductForm.waiting_for_description)
-
-# Callback для пропуска цены
-@router.callback_query(ProductForm.waiting_for_price, F.data == "add_skip")
-async def skip_price(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(price=None)
-    await callback.message.answer("Введите описание товара:", reply_markup=get_skip_cancel_kb())
-    await state.set_state(ProductForm.waiting_for_description)
-    await callback.answer()
-
-# Callback для отмены добавления товара
-@router.callback_query(ProductForm.waiting_for_price, F.data == "add_cancel")
-async def cancel_add_product_price(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete()
-    await callback.message.answer("⚙️ Админская панель", reply_markup=admin_main_kb)
-    await state.clear()
-    await callback.answer()
-
-# Обработка описания товара
-@router.message(ProductForm.waiting_for_description)
-async def add_product_description(message: Message, state: FSMContext):
-    await state.update_data(description=message.text)
-    await message.answer("Отправьте фото товара (или пропустите этот шаг):", reply_markup=get_skip_cancel_kb())
-    await state.set_state(ProductForm.waiting_for_images)
-
-# Callback для пропуска описания
-@router.callback_query(ProductForm.waiting_for_description, F.data == "add_skip")
-async def skip_description(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(description=None)
-    await callback.message.answer("Отправьте фото товара (или пропустите этот шаг):", reply_markup=get_skip_cancel_kb())
-    await state.set_state(ProductForm.waiting_for_images)
-    await callback.answer()
-
-# Callback для отмены добавления товара
-@router.callback_query(ProductForm.waiting_for_description, F.data == "add_cancel")
-async def cancel_add_product_description(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete()
-    await callback.message.answer("⚙️ Админская панель", reply_markup=admin_main_kb)
-    await state.clear()
-    await callback.answer()
-
-# Обработка фото товара
-@router.message(ProductForm.waiting_for_images)
-async def add_product_images(message: Message, state: FSMContext):
-    images = await state.get_data()
-    images_list = images.get("images", [])
-    if message.photo:
-        photo = message.photo[-1]
-        file = await message.bot.get_file(photo.file_id)
-        file_path = f"media/product_{photo.file_id}.jpg"
-        await message.bot.download_file(file.file_path, file_path)
-        images_list.append(file_path)
-    await state.update_data(images=images_list)
-    await message.answer("Фото добавлено. Отправьте ещё фото или нажмите '✅ Готово' для завершения.", reply_markup=get_images_done_kb())
-
-# Callback для завершения добавления фото
-@router.callback_query(ProductForm.waiting_for_images, F.data == "images_done")
-async def finish_images(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    images = data.get("images", [])
-    images_str = ";".join(images) if images else None
-    await state.update_data(images=images_str)
-    text = "<b>Проверьте введённые данные:</b>\n"
-    for key, value in data.items():
-        text += f"<b>{key}</b>: {value}\n"
-    await callback.message.answer(text, reply_markup=get_confirm_add_kb(), parse_mode="HTML")
-    await state.set_state(ProductForm.waiting_for_final_confirm)
-    await callback.answer()
-
-# Callback для отмены добавления фото
-@router.callback_query(ProductForm.waiting_for_images, F.data == "add_cancel")
-async def cancel_add_product_images(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete()
-    await callback.message.answer("⚙️ Админская панель", reply_markup=admin_main_kb)
-    await state.clear()
-    await callback.answer()
-
-# Callback для подтверждения добавления товара
-@router.callback_query(ProductForm.waiting_for_final_confirm, F.data == "add_confirm")
-async def add_product_save(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
     async with async_session() as session:
-        await add_product(session, **data)
-    await callback.message.answer("Товар успешно добавлен!")
+        product = await add_product(
+            session,
+            name=name,
+            category=category_val,
+            subcategory=subcategory,
+            country=country,
+            type=type_,
+            price=price
+        )
+        saved_paths = []
+        for idx, img in enumerate(images, start=1):
+            if os.path.isfile(img):
+                ext = os.path.splitext(img)[1] or '.jpg'
+                final_name = f"product_{product.id}_{idx}{ext}"
+                final_path = os.path.join(MEDIA_DIR, final_name)
+                try:
+                    os.replace(img, final_path)
+                except Exception:
+                    try:
+                        import shutil
+                        shutil.copy(img, final_path)
+                        os.remove(img)
+                    except Exception:
+                        final_path = img
+                saved_paths.append(final_path)
+                await add_photo(session, product.id, final_path)
+        if saved_paths:
+            images_field = ';'.join(saved_paths)
+            await update_product(session, product.id, images=images_field)
+
+    await callback.message.answer("Товар успешно добавлен.")
     await state.clear()
     await callback.answer()
 
-# Callback для отмены добавления товара на финальном шаге
-@router.callback_query(ProductForm.waiting_for_final_confirm, F.data == "add_cancel")
-async def add_product_cancel(callback: CallbackQuery, state: FSMContext):
-    await callback.message.delete()
-    await callback.message.answer("⚙️ Админская панель", reply_markup=admin_main_kb)
+@router.callback_query(F.data == "add_cancel")
+async def add_cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
+    await callback.message.answer("Добавление товара отменено.")
     await callback.answer()

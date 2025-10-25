@@ -38,39 +38,7 @@ def get_type_kb():
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-# Клавиатура для шага добавления товара
-def get_add_step_kb():
-    steps = [
-        ("Название", "addstep_name"),
-        ("Категория", "addstep_category"),
-        ("Страна", "addstep_country"),
-        ("Тип", "addstep_type"),
-        ("Размеры", "addstep_sizes"),
-        ("Цена", "addstep_price"),
-        ("Описание", "addstep_description"),
-        ("Фото", "addstep_photo"),
-    ]
-    kb = [[InlineKeyboardButton(text=label, callback_data=cb)] for label, cb in steps]
-    kb.append([InlineKeyboardButton(text="⏭️ Пропустить", callback_data="add_skip"),
-               InlineKeyboardButton(text="❌ Отмена", callback_data="add_cancel")])
-    kb.append([InlineKeyboardButton(text="✅ Завершить", callback_data="add_confirm")])
-    return InlineKeyboardMarkup(inline_keyboard=kb)
-
-def get_confirm_add_kb():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="✅ Подтвердить", callback_data="add_confirm"),
-             InlineKeyboardButton(text="❌ Отмена", callback_data="add_cancel")]
-        ]
-    )
-
-def get_skip_cancel_kb():
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="add_skip"),
-             InlineKeyboardButton(text="❌ Отмена", callback_data="add_cancel")]
-        ]
-    )
+# Клавиатура для фото
 
 def get_images_done_kb():
     return InlineKeyboardMarkup(

@@ -17,7 +17,7 @@ router = Router()
 
 # Вывод списка товаров для управления
 @router.callback_query(F.data == "show_products_manage")
-async def show_products_manage(callback: CallbackQuery, state: FSMContext):
+async def show_products_manage(callback: CallbackQuery):
     async with async_session() as session:
         products = await get_all_products(session)
     if not products:
