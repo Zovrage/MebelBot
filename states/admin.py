@@ -14,3 +14,8 @@ class ProductForm(StatesGroup):
 class EditProductForm(StatesGroup):
     waiting_for_field = State()
     waiting_for_value = State()
+
+class AdminProductFilter(StatesGroup):
+    waiting_for_category = State()
+    waiting_for_country = State()
+    waiting_for_type = State()

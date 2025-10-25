@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update, delete
+from sqlalchemy.orm import selectinload
 from .models import Product, Lead, LeadStatus, ProductCategory, Photo
 
 # --- CRUD для товаров ---
@@ -28,13 +29,38 @@ async def get_product(session: AsyncSession, product_id):
     result = await session.execute(select(Product).where(Product.id == product_id))
     return result.scalar_one_or_none()
 
-async def update_product(session: AsyncSession, product_id, **kwargs):
-    await session.execute(update(Product).where(Product.id == product_id).values(**kwargs))
+async def update_product(session: AsyncSession, product_id, update_data: dict, new_photos: list = None, delete_photo_ids: list = None):
+    # Обновление полей товара
+    await session.execute(update(Product).where(Product.id == product_id).values(**update_data))
+    # Удаление фото
+    if delete_photo_ids:
+        await session.execute(delete(Photo).where(Photo.id.in_(delete_photo_ids), Photo.product_id == product_id))
+    # Добавление новых фото
+    if new_photos:
+        for photo_data in new_photos:
+            photo = Photo(product_id=product_id, **photo_data)
+            session.add(photo)
     await session.commit()
 
 async def delete_product(session: AsyncSession, product_id):
     await session.execute(delete(Product).where(Product.id == product_id))
     await session.commit()
+
+# --- CRUD для фото ---
+async def add_photo(session: AsyncSession, product_id: int, filename: str, original_file_id: str = None):
+    photo = Photo(product_id=product_id, filename=filename, original_file_id=original_file_id)
+    session.add(photo)
+    await session.commit()
+    await session.refresh(photo)
+    return photo
+
+async def delete_photo(session: AsyncSession, photo_id: int):
+    await session.execute(delete(Photo).where(Photo.id == photo_id))
+    await session.commit()
+
+async def get_photos_by_product(session: AsyncSession, product_id: int):
+    result = await session.execute(select(Photo).where(Photo.product_id == product_id))
+    return result.scalars().all()
 
 # --- CRUD для заявок (лидов) ---
 async def add_lead(session: AsyncSession, **kwargs):
@@ -45,7 +71,7 @@ async def add_lead(session: AsyncSession, **kwargs):
     return lead
 
 async def get_leads(session: AsyncSession, status=None):
-    stmt = select(Lead)
+    stmt = select(Lead).options(selectinload(Lead.product))
     if status:
         if isinstance(status, str):
             status = LeadStatus(status)

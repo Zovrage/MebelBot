@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   mebelbot:
     build: .
@@ -7,5 +6,6 @@ services:
     env_file:
       - .env
     volumes:
+      - .:/app
       - ./media:/app/media
     command: python main.py

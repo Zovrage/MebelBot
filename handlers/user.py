@@ -1,8 +1,8 @@
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InputFile
-from aiogram.types.input_file import FSInputFile
 from database.crud import get_products, add_lead, get_photos_by_product
+from aiogram.types.input_file import FSInputFile
 from database.models import ProductCategory
 from database.db import async_session
 from keyboards.user import (
@@ -36,10 +36,23 @@ async def start_menu(msg: Message):
     await msg.answer(text, reply_markup=main_menu_kb)
 
 @router.callback_query(F.data == 'back_main')
-async def back_main(call: CallbackQuery):
-    await call.message.edit_text('Главное меню. Выберите категорию:', reply_markup=main_menu_kb)
+async def back_main(call: CallbackQuery, state: FSMContext = None):
+    # Удаляем все сообщения с карточками товаров, если они есть
+    if state is not None:
+        data = await state.get_data()
+        prev_product_msgs = data.get('product_message_ids', [])
+        for msg_id in prev_product_msgs:
+            try:
+                await call.bot.delete_message(call.message.chat.id, msg_id)
+            except Exception:
+                pass
+        await state.update_data(product_message_ids=[])
+    try:
+        await call.message.delete()
+    except Exception:
+        pass
+    await call.message.answer('Главное меню. Выберите категорию:', reply_markup=main_menu_kb)
 
-# --- Категории и подкатегории ---
 @router.callback_query(F.data == 'cat_bedroom')
 async def bedroom_menu(call: CallbackQuery):
     await call.message.edit_text('Спальная мебель:', reply_markup=get_bedroom_kb())
@@ -62,8 +75,21 @@ async def soft_rus_menu(call: CallbackQuery):
 
 @router.callback_query(F.data == 'back_to_cat')
 async def back_to_cat(call: CallbackQuery, state: FSMContext):
-    # Можно хранить в state текущую категорию для возврата
-    await call.message.edit_text('Выберите категорию:', reply_markup=main_menu_kb)
+    # Удаляем все сообщения с карточками товаров, если они есть
+    if state is not None:
+        data = await state.get_data()
+        prev_product_msgs = data.get('product_message_ids', [])
+        for msg_id in prev_product_msgs:
+            try:
+                await call.bot.delete_message(call.message.chat.id, msg_id)
+            except Exception:
+                pass
+        await state.update_data(product_message_ids=[])
+    try:
+        await call.message.delete()
+    except Exception:
+        pass
+    await call.message.answer('Выберите категорию:', reply_markup=main_menu_kb)
 
 # --- Галерея товаров по категориям ---
 def get_country_display(country_code):
@@ -80,9 +106,13 @@ def get_type_display(type_code):
         return 'Угловая'
     return type_code or '-'
 
-async def show_products(call, category, country=None, type_=None):
+async def show_products(call, category, country=None, type_=None, state: FSMContext = None):
+    # Всегда удаляем сообщение, по которому пришёл callback (например, кнопки выбора типа)
+    try:
+        await call.message.delete()
+    except Exception:
+        pass
     # Удаляем предыдущие сообщения с товарами (если есть)
-    state: FSMContext = call.bot.get('fsm_context') if hasattr(call.bot, 'get') else None
     if state is not None:
         data = await state.get_data()
         prev_product_msgs = data.get('product_message_ids', [])
@@ -117,7 +147,7 @@ async def show_products(call, category, country=None, type_=None):
             for i, photo in enumerate(photos):
                 file_path = os.path.join('media', photo.filename)
                 if os.path.exists(file_path):
-                    media.append(InputMediaPhoto(media=FSInputFile(file_path), caption=None if i > 0 else None))
+                    media.append(FSInputFile(file_path))
             price = product.price
             if price is None or price == 0:
                 price_str = '-'
@@ -132,13 +162,13 @@ async def show_products(call, category, country=None, type_=None):
                 f"Цена: {price_str}"
             )
             if media:
-                media[0].caption = caption
-                media[0].parse_mode = 'HTML'
                 if len(media) == 1:
-                    msg = await call.message.answer_photo(media=media[0].media, caption=caption, parse_mode='HTML')
+                    msg = await call.message.answer_photo(media[0], caption=caption, parse_mode='HTML')
                     new_product_msgs.append(msg.message_id)
                 else:
-                    msgs = await call.message.answer_media_group(media)
+                    from aiogram.types import InputMediaPhoto
+                    media_group = [InputMediaPhoto(media=FSInputFile(os.path.join('media', p.filename)), caption=caption if i == 0 else None, parse_mode='HTML' if i == 0 else None) for i, p in enumerate(photos)]
+                    msgs = await call.message.answer_media_group(media_group)
                     for m in msgs:
                         new_product_msgs.append(m.message_id)
                 msg2 = await call.message.answer(reply_markup=get_product_card_kb(product.id), text="Выберите действие:")
@@ -156,52 +186,52 @@ async def show_products(call, category, country=None, type_=None):
 
 # --- Карточка товара ---
 @router.callback_query(F.data.startswith('bedroom'))
-async def show_bedroom(call: CallbackQuery):
+async def show_bedroom(call: CallbackQuery, state: FSMContext):
     sub = call.data.replace('bedroom_', '')
     country = None
     if sub in ['rus', 'tur']:
         country = 'russia' if sub == 'rus' else 'turkey'
-    await show_products(call, ProductCategory.bedroom, country=country)
+    await show_products(call, ProductCategory.bedroom, country=country, state=state)
 
 @router.callback_query(F.data.startswith('kitchen'))
-async def show_kitchen(call: CallbackQuery):
+async def show_kitchen(call: CallbackQuery, state: FSMContext):
     sub = call.data.replace('kitchen_', '')
     type_ = None
     if sub in ['straight', 'corner']:
         type_ = sub  # 'straight' или 'corner'
-    await show_products(call, ProductCategory.kitchen, type_=type_)
+    await show_products(call, ProductCategory.kitchen, type_=type_, state=state)
 
 @router.callback_query(F.data == 'soft_rus_straight')
-async def show_soft_rus_straight(call: CallbackQuery):
-    await show_products(call, ProductCategory.soft, country='russia', type_='straight')
+async def show_soft_rus_straight(call: CallbackQuery, state: FSMContext):
+    await show_products(call, ProductCategory.soft, country='russia', type_='straight', state=state)
 
 @router.callback_query(F.data == 'soft_rus_corner')
-async def show_soft_rus_corner(call: CallbackQuery):
-    await show_products(call, ProductCategory.soft, country='russia', type_='corner')
+async def show_soft_rus_corner(call: CallbackQuery, state: FSMContext):
+    await show_products(call, ProductCategory.soft, country='russia', type_='corner', state=state)
 
 @router.callback_query(F.data == 'soft_tur')
-async def show_soft_tur(call: CallbackQuery):
-    await show_products(call, ProductCategory.soft, country='turkey')
+async def show_soft_tur(call: CallbackQuery, state: FSMContext):
+    await show_products(call, ProductCategory.soft, country='turkey', state=state)
 
 @router.callback_query(F.data == 'cat_tables')
-async def show_tables(call: CallbackQuery):
-    await show_products(call, ProductCategory.tables)
+async def show_tables(call: CallbackQuery, state: FSMContext):
+    await show_products(call, ProductCategory.tables, state=state)
 
 @router.callback_query(F.data == 'cat_dressers')
-async def show_dressers(call: CallbackQuery):
-    await show_products(call, ProductCategory.dressers)
+async def show_dressers(call: CallbackQuery, state: FSMContext):
+    await show_products(call, ProductCategory.dressers, state=state)
 
 @router.callback_query(F.data == 'cat_mattress')
-async def show_mattress(call: CallbackQuery):
-    await show_products(call, ProductCategory.mattress)
+async def show_mattress(call: CallbackQuery, state: FSMContext):
+    await show_products(call, ProductCategory.mattress, state=state)
 
 @router.callback_query(F.data == 'cat_wardrobe')
-async def show_wardrobe(call: CallbackQuery):
-    await show_products(call, ProductCategory.wardrobe)
+async def show_wardrobe(call: CallbackQuery, state: FSMContext):
+    await show_products(call, ProductCategory.wardrobe, state=state)
 
 @router.callback_query(F.data == 'cat_beds')
-async def show_beds(call: CallbackQuery):
-    await show_products(call, ProductCategory.beds)
+async def show_beds(call: CallbackQuery, state: FSMContext):
+    await show_products(call, ProductCategory.beds, state=state)
 
 # --- О компании ---
 @router.callback_query(F.data == 'about')
