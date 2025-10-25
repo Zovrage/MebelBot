@@ -1,4 +1,5 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 # Главное меню
@@ -15,6 +16,7 @@ main_menu_kb = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text='⚙️ Настройка бота', callback_data='admin_panel')],
 ])
 
+# Клавиатуры для подкатегорий и навигации
 def get_bedroom_kb():
     kb = InlineKeyboardBuilder()
     kb.button(text='🇷🇺 Российская', callback_data='bedroom_rus')
@@ -23,6 +25,7 @@ def get_bedroom_kb():
     kb.adjust(1)
     return kb.as_markup()
 
+# Клавиатура для выбора типа кухни
 def get_kitchen_kb():
     kb = InlineKeyboardBuilder()
     kb.button(text='➡️ Прямая', callback_data='kitchen_straight')
@@ -31,6 +34,7 @@ def get_kitchen_kb():
     kb.adjust(1)
     return kb.as_markup()
 
+# Клавиатура для выбора типа мягкой мебели
 def get_soft_kb():
     kb = InlineKeyboardBuilder()
     kb.button(text='🇷🇺 Российская', callback_data='soft_rus')
@@ -39,6 +43,7 @@ def get_soft_kb():
     kb.adjust(1)
     return kb.as_markup()
 
+# Клавиатура для выбора типа российской мягкой мебели
 def get_soft_rus_kb():
     kb = InlineKeyboardBuilder()
     kb.button(text='➡️ Прямая', callback_data='soft_rus_straight')
@@ -47,12 +52,14 @@ def get_soft_rus_kb():
     kb.adjust(1)
     return kb.as_markup()
 
+# Простая клавиатура "Назад"
 def get_simple_cat_kb(back_cb):
     kb = InlineKeyboardBuilder()
     kb.button(text='🔙 Назад', callback_data=back_cb)
     kb.adjust(1)
     return kb.as_markup()
 
+# Клавиатура для карточки товара
 def get_product_card_kb(product_id):
     kb = InlineKeyboardBuilder()
     kb.button(text='❓ Задать вопрос', callback_data=f'ask_{product_id}')
@@ -62,6 +69,7 @@ def get_product_card_kb(product_id):
     kb.adjust(1)
     return kb.as_markup()
 
+# Клавиатура для галереи товаров
 def get_gallery_nav_kb(product_ids, current_idx):
     kb = InlineKeyboardBuilder()
     if current_idx > 0:

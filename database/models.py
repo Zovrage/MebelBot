@@ -6,7 +6,7 @@ from sqlalchemy.orm import relationship
 
 from .db import Base
 
-
+# Категории товаров
 class ProductCategory(enum.Enum):
     bedroom = 'bedroom'
     kitchen = 'kitchen'
@@ -17,7 +17,7 @@ class ProductCategory(enum.Enum):
     mattress = 'mattress'
     wardrobe = 'wardrobe'
 
-
+# Словарь для отображения категорий на русском
 CATEGORY_DISPLAY = {
     ProductCategory.bedroom: 'Спальная мебель',
     ProductCategory.kitchen: 'Кухонная мебель',
@@ -30,7 +30,7 @@ CATEGORY_DISPLAY = {
 }
 
 
-
+# Товар
 class Product(Base):
     __tablename__ = 'products'
     id = Column(Integer, primary_key=True)
@@ -44,13 +44,13 @@ class Product(Base):
     sizes = Column(String(255), nullable=True)  # Размеры товара
     photos = relationship('Photo', back_populates='product', cascade='all, delete-orphan')
 
-
+# Статус заявки (лида)
 class LeadStatus(enum.Enum):
     new = 'Новая'
     in_progress = 'В работе'
     closed = 'Закрыта'
 
-
+#  Заявка (лид)
 class Lead(Base):
     __tablename__ = 'leads'
     id = Column(Integer, primary_key=True)
@@ -61,7 +61,7 @@ class Lead(Base):
     status = Column(Enum(LeadStatus), default=LeadStatus.new)
     product = relationship('Product')
 
-
+# Фотография товара
 class Photo(Base):
     __tablename__ = 'photos'
     id = Column(Integer, primary_key=True)

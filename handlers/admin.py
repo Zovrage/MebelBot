@@ -1,16 +1,19 @@
+import os
+
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
+from aiogram.types import FSInputFile
+
 from database.models import ProductCategory
-from database.crud import update_product, get_products
+from database.crud import update_product, get_products, get_photos_by_product, add_photo
 from keyboards.admin import admin_main_kb, get_add_step_kb, get_country_kb, get_type_kb, get_edit_fields_kb, get_category_add_kb, get_leads_kb, get_lead_status_kb, get_category_kb, get_product_manage_kb, get_back_to_admin_kb
 from database.db import async_session
 from states.admin import EditProductForm, ProductForm, AdminProductFilter
 from config import ADMIN_IDS
 from handlers.user import get_country_display, get_type_display
-import os
-from aiogram.types import FSInputFile
-from database.crud import get_photos_by_product
+
+
 
 
 # Проверка, является ли пользователь админом
@@ -531,6 +534,7 @@ async def admin_show_products(callback, category=None, country=None, type_=None,
         await state.update_data(admin_product_message_ids=product_message_ids)
     await callback.answer()
 
+# Кнопка "Назад" к управлению товарами
 @router.callback_query(F.data == "back_to_product_manage")
 async def back_to_product_manage(callback: CallbackQuery, state: FSMContext):
     # Получаем фильтры из состояния

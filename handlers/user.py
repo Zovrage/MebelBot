@@ -1,8 +1,12 @@
+import re
+import os
+
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InputFile
-from database.crud import get_products, add_lead, get_photos_by_product
+from aiogram.types import Message, CallbackQuery
 from aiogram.types.input_file import FSInputFile
+
+from database.crud import get_products, add_lead, get_photos_by_product
 from database.models import ProductCategory
 from database.db import async_session
 from keyboards.user import (
@@ -10,8 +14,7 @@ from keyboards.user import (
     get_simple_cat_kb, get_product_card_kb
 )
 from states.user import OrderForm
-import re
-import os
+
 
 router = Router()
 

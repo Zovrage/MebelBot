@@ -2,9 +2,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import update, delete
 from sqlalchemy.orm import selectinload
+
 from .models import Product, Lead, LeadStatus, ProductCategory, Photo
 
-# --- CRUD для товаров ---
+# CRUD для товаров
 async def add_product(session: AsyncSession, **kwargs):
     product = Product(**kwargs)
     session.add(product)
@@ -46,7 +47,7 @@ async def delete_product(session: AsyncSession, product_id):
     await session.execute(delete(Product).where(Product.id == product_id))
     await session.commit()
 
-# --- CRUD для фото ---
+# CRUD для фото
 async def add_photo(session: AsyncSession, product_id: int, filename: str, original_file_id: str = None):
     photo = Photo(product_id=product_id, filename=filename, original_file_id=original_file_id)
     session.add(photo)
@@ -62,7 +63,7 @@ async def get_photos_by_product(session: AsyncSession, product_id: int):
     result = await session.execute(select(Photo).where(Photo.product_id == product_id))
     return result.scalars().all()
 
-# --- CRUD для заявок (лидов) ---
+# CRUD для заявок (лидов)
 async def add_lead(session: AsyncSession, **kwargs):
     lead = Lead(**kwargs)
     session.add(lead)
@@ -89,7 +90,7 @@ async def delete_lead(session: AsyncSession, lead_id):
     await session.execute(delete(Lead).where(Lead.id == lead_id))
     await session.commit()
 
-# --- CRUD для фотографий товаров ---
+# CRUD для фотографий товаров
 async def add_photo(session: AsyncSession, product_id: int, filename: str, original_file_id: str = None):
     photo = Photo(product_id=product_id, filename=filename, original_file_id=original_file_id)
     session.add(photo)

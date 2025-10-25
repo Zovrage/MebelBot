@@ -1,4 +1,3 @@
-import logging
 import asyncio
 import os
 
@@ -11,7 +10,7 @@ from database.db import init_db
 
 
 
-
+# Основная асинхронная функция для запуска бота
 async def main():
     if not os.path.exists('media'):
         os.makedirs('media')
@@ -26,10 +25,11 @@ async def main():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    # Точка входа в приложение. Запускает асинхронную функцию main.
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print('Exit')
+        print("Выход")
     except Exception as e:
-        logging.exception(f'Ошибка при запуске бота: {e}')
+        print(f"Ошибка: {e}")
+

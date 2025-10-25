@@ -1,5 +1,6 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from database.models import ProductCategory, LeadStatus
+
+from database.models import LeadStatus
 
 
 
@@ -49,7 +50,7 @@ def get_category_add_kb():
         ]
     )
 
-# Клавиатура выбора страны с emoji
+# Клавиатура выбора страны
 def get_country_kb():
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -60,7 +61,7 @@ def get_country_kb():
         ]
     )
 
-# Клавиатура выбора страны без кнопки "Отмена"
+# Клавиатура выбора страны
 def get_country_kb_no_cancel():
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -70,7 +71,7 @@ def get_country_kb_no_cancel():
         ]
     )
 
-# Клавиатура выбора типа с emoji
+# Клавиатура выбора типа
 def get_type_kb():
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -81,7 +82,7 @@ def get_type_kb():
         ]
     )
 
-# Клавиатура выбора типа без кнопки "Отмена"
+# Клавиатура выбора типа
 def get_type_kb_no_cancel():
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -99,12 +100,14 @@ lead_status_kb = InlineKeyboardMarkup(
     ]
 )
 
+# Клавиатура с товарами для управления
 def get_products_kb(products):
     kb = InlineKeyboardMarkup()
     for product in products:
         kb.add(InlineKeyboardButton(text=product.name, callback_data=f"product_{product.id}"))
     return kb
 
+# Клавиатура управления конкретным товаром
 def get_product_manage_kb(product_id):
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -114,6 +117,7 @@ def get_product_manage_kb(product_id):
         ]
     )
 
+# Клавиатура для управления лидами
 def get_leads_kb():
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     return InlineKeyboardMarkup(
@@ -122,6 +126,7 @@ def get_leads_kb():
         ]
     )
 
+# Клавиатура управления конкретным лидом
 def get_lead_manage_kb(lead_id):
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -130,6 +135,7 @@ def get_lead_manage_kb(lead_id):
         ]
     )
 
+# Клавиатура для шага добавления с пропуском и отменой
 def get_add_step_kb():
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -138,6 +144,7 @@ def get_add_step_kb():
         ]
     )
 
+# Клавиатура для выбора поля редактирования товара
 def get_edit_fields_kb(fields):
     kb = [
         [InlineKeyboardButton(text=label, callback_data=f"editfield_{field}")]
@@ -146,6 +153,7 @@ def get_edit_fields_kb(fields):
     kb.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_product_manage")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
+# Клавиатура для изменения статуса лида
 def get_lead_status_kb(lead_id):
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -159,6 +167,7 @@ def get_lead_status_kb(lead_id):
         ]
     )
 
+# Клавиатура возврата в главное меню админа
 def get_back_to_admin_kb():
     return InlineKeyboardMarkup(
         inline_keyboard=[
