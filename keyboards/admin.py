@@ -30,6 +30,25 @@ def get_category_kb():
         ]
     )
 
+# Клавиатура выбора категории товара для добавления
+def get_category_add_kb():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f"🛏️ Спальная мебель", callback_data="category_bedroom")],
+            [InlineKeyboardButton(text=f"🍽️ Кухонная мебель", callback_data="category_kitchen")],
+            [InlineKeyboardButton(text=f"🛋️ Мягкая мебель", callback_data="category_soft")],
+            [InlineKeyboardButton(text=f"🪑 Столы и стулья", callback_data="category_tables")],
+            [InlineKeyboardButton(text=f"🗄️ Тумбы и комоды", callback_data="category_dressers")],
+            [InlineKeyboardButton(text=f"🛌 Кровать", callback_data="category_bed")],
+            [InlineKeyboardButton(text=f"🛌 Матрасы", callback_data="category_mattress")],
+            [InlineKeyboardButton(text=f"🚪 Шкафы", callback_data="category_wardrobe")],
+            [
+                InlineKeyboardButton(text="⏭️ Пропустить", callback_data="add_skip"),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="add_cancel")
+            ]
+        ]
+    )
+
 # Клавиатура выбора страны с emoji
 def get_country_kb():
     return InlineKeyboardMarkup(
@@ -41,6 +60,16 @@ def get_country_kb():
         ]
     )
 
+# Клавиатура выбора страны без кнопки "Отмена"
+def get_country_kb_no_cancel():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🇷🇺 Российская", callback_data="country_russia")],
+            [InlineKeyboardButton(text="🇹🇷 Турецкая", callback_data="country_turkey")],
+            [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="country_skip_country")],
+        ]
+    )
+
 # Клавиатура выбора типа с emoji
 def get_type_kb():
     return InlineKeyboardMarkup(
@@ -49,6 +78,16 @@ def get_type_kb():
             [InlineKeyboardButton(text="↩️ Угловая", callback_data="type_corner")],
             [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="type_skip_type")],
             [InlineKeyboardButton(text="❌ Отмена", callback_data="type_cancel_type")],
+        ]
+    )
+
+# Клавиатура выбора типа без кнопки "Отмена"
+def get_type_kb_no_cancel():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➡️ Прямая", callback_data="type_straight")],
+            [InlineKeyboardButton(text="↩️ Угловая", callback_data="type_corner")],
+            [InlineKeyboardButton(text="⏭️ Пропустить", callback_data="type_skip_type")],
         ]
     )
 
@@ -70,15 +109,18 @@ def get_product_manage_kb(product_id):
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"edit_{product_id}"),
-             InlineKeyboardButton(text="🗑️ Удалить", callback_data=f"delete_{product_id}")]
+             InlineKeyboardButton(text="🗑️ Удалить", callback_data=f"delete_{product_id}")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_admin")]
         ]
     )
 
-def get_leads_kb(leads):
-    kb = InlineKeyboardMarkup()
-    for lead in leads:
-        kb.add(InlineKeyboardButton(text=f"{lead.name} ({lead.status.value})", callback_data=f"lead_{lead.id}"))
-    return kb
+def get_leads_kb():
+    from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text='🔙 Назад', callback_data='back_to_admin')]
+        ]
+    )
 
 def get_lead_manage_kb(lead_id):
     return InlineKeyboardMarkup(
@@ -97,9 +139,29 @@ def get_add_step_kb():
     )
 
 def get_edit_fields_kb(fields):
+    kb = [
+        [InlineKeyboardButton(text=label, callback_data=f"editfield_{field}")]
+        for field, label in fields
+    ]
+    kb.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_product_manage")])
+    return InlineKeyboardMarkup(inline_keyboard=kb)
+
+def get_lead_status_kb(lead_id):
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=label, callback_data=f"editfield_{field}")]
-            for field, label in fields
+            [
+                InlineKeyboardButton(text="🆕 Новая", callback_data=f"lead_status_new_{lead_id}"),
+                InlineKeyboardButton(text="🛠️ В работе", callback_data=f"lead_status_in_progress_{lead_id}"),
+                InlineKeyboardButton(text="✅ Закрыта", callback_data=f"lead_status_closed_{lead_id}")
+            ],
+            [InlineKeyboardButton(text="🗑️ Удалить", callback_data=f"delete_lead_{lead_id}")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_admin")]
+        ]
+    )
+
+def get_back_to_admin_kb():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_admin")]
         ]
     )

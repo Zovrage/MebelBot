@@ -41,8 +41,8 @@ class Product(Base):
     type = Column(String(100), nullable=True)  # прямая, угловая и т.д.
     price = Column(Float, nullable=True)
     description = Column(Text, nullable=True)
-    images = Column(Text, nullable=True)  # Список путей через ;
     sizes = Column(String(255), nullable=True)  # Размеры товара
+    photos = relationship('Photo', back_populates='product', cascade='all, delete-orphan')
 
 
 class LeadStatus(enum.Enum):
@@ -65,8 +65,8 @@ class Lead(Base):
 class Photo(Base):
     __tablename__ = 'photos'
     id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey('products.id'), nullable=False)
+    product_id = Column(Integer, ForeignKey('products.id', ondelete='CASCADE'), nullable=False)
     filename = Column(String(255), nullable=False)  # путь к файлу в media
     original_file_id = Column(String(255), nullable=True)  # file_id Telegram
     created_at = Column(DateTime, default=datetime.utcnow)
-    product = relationship('Product', backref='photos')
+    product = relationship('Product', back_populates='photos')

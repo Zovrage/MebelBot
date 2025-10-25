@@ -1,11 +1,11 @@
-version: '3.8'
 services:
   mebelbot:
-    build: MebelBot
+    build: .
     container_name: mebelbot
     restart: unless-stopped
     env_file:
       - .env
     volumes:
+      - .:/app
       - ./media:/app/media
     command: python main.py
