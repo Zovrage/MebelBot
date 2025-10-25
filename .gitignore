@@ -1,38 +1,16 @@
-# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.env
-.venv/
-venv/
+.Python
 env/
-
-# PyCharm
-.idea/
-
-# VSCode
-.vscode/
-
-# Docker
-*.log
-*.pid
-
-# Database
-*.db
-
-# Media (если не нужно хранить в git)
-media/
-
-# OS
-Thumbs.db
+venv/
+build/
+dist/
+*.egg-info/
+.env
 .DS_Store
-
-# Модули и временные файлы
-*.swp
-*.bak
-*.tmp
-
-# Секреты
-config.py
+.idea/
+.vscode/
+media/
 

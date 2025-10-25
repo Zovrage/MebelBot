@@ -12,8 +12,6 @@ from database.db import init_db
 
 
 
-
-
 async def main():
     if not os.path.exists('media'):
         os.makedirs('media')
@@ -34,4 +32,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print('Exit')
     except Exception as e:
-        print(f'Ошибка: {e}')
+        logging.exception(f'Ошибка при запуске бота: {e}')
